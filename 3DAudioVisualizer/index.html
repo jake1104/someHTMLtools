@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Sphere Audio Visualizer</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Monaco', 'Consolas', monospace;
+        }
+        canvas {
+            display: block;
+        }
+        #info {
+            position: absolute;
+            top: 10px;
+            width: 100%;
+            text-align: center;
+            z-index: 100;
+            display: block;
+            font-size: 1.2em;
+        }
+        a {
+            color: #00aaff;
+        }
+        #fileInput {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+            padding: 10px 20px;
+            background-color: #222;
+            border: 1px solid #444;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="info">3D Sphere Audio Visualizer</div>
+    <input type="file" id="fileInput" accept="audio/*">
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Basic Scene Setup ---
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        camera.position.z = 5;
+
+        // --- Controls ---
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+        scene.add(ambientLight);
+        const pointLight = new THREE.PointLight(0xffffff, 0.8);
+        camera.add(pointLight);
+        scene.add(camera);
+
+        // --- Sphere Mesh ---
+        const sphereGeometry = new THREE.SphereGeometry(1.5, 64, 64);
+        const material = new THREE.MeshPhongMaterial({
+            color: 0x00aaff,
+            wireframe: true,
+            shininess: 50
+        });
+        const sphere = new THREE.Mesh(sphereGeometry, material);
+        scene.add(sphere);
+
+        // Store original vertex positions
+        const originalPositions = sphere.geometry.attributes.position.clone();
+
+        // --- Web Audio API Setup ---
+        let audioContext, analyser, source, dataArray;
+        const fileInput = document.getElementById('fileInput');
+        const infoDiv = document.getElementById('info');
+
+        fileInput.addEventListener('change', function(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            infoDiv.textContent = `Playing: ${file.name}`;
+
+            const audio = new Audio();
+            audio.src = URL.createObjectURL(file);
+            audio.crossOrigin = "anonymous";
+            audio.play();
+
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256; // Fast Fourier Transform size
+            }
+            
+            // Check if a source already exists and disconnect it
+            if (source) {
+                source.disconnect();
+            }
+
+            source = audioContext.createMediaElementSource(audio);
+            source.connect(analyser);
+            analyser.connect(audioContext.destination);
+
+            const bufferLength = analyser.frequencyBinCount;
+            dataArray = new Uint8Array(bufferLength);
+        });
+
+        // --- Animation Loop ---
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // Update controls
+            controls.update();
+
+            // Animate sphere if audio is playing
+            if (analyser && dataArray) {
+                analyser.getByteFrequencyData(dataArray);
+
+                const positions = sphere.geometry.attributes.position.array;
+                const vertex = new THREE.Vector3();
+                
+                for (let i = 0; i < positions.length; i += 3) {
+                    vertex.fromBufferAttribute(originalPositions, i / 3);
+                    
+                    // Map frequency data to vertex displacement
+                    const index = (i / 3) % dataArray.length;
+                    const frequencyValue = dataArray[index] / 255.0; // Normalize to 0-1
+                    const displacement = 1 + frequencyValue * 0.5; // Modulate displacement strength
+                    
+                    vertex.normalize().multiplyScalar(1.5 * displacement);
+
+                    positions[i] = vertex.x;
+                    positions[i + 1] = vertex.y;
+                    positions[i + 2] = vertex.z;
+                }
+                
+                sphere.geometry.attributes.position.needsUpdate = true;
+                sphere.rotation.y += 0.001;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Handle Window Resize ---
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+    </script>
+</body>
+</html>

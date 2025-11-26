@@ -1,0 +1,1177 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ASCII Art Studio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            bg: '#0a0b0d',
+            fg: '#f1f5f9',
+            muted: '#94a3b8',
+            acc: '#10b981',
+            'acc-hover': '#059669',
+            card: '#111827',
+            'card-hover': '#1f2937',
+            border: '#374151',
+            panel: '#0f172a',
+            'panel-light': '#1e293b',
+            danger: '#ef4444',
+            warning: '#f59e0b',
+            info: '#3b82f6'
+          },
+          animation: {
+            'fade-in': 'fadeIn 0.3s ease-out',
+            'slide-up': 'slideUp 0.3s ease-out',
+            'pulse-soft': 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            'glow': 'glow 2s ease-in-out infinite alternate'
+          },
+          keyframes: {
+            fadeIn: {
+              '0%': { opacity: '0', transform: 'translateY(10px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' }
+            },
+            slideUp: {
+              '0%': { transform: 'translateY(20px)', opacity: '0' },
+              '100%': { transform: 'translateY(0)', opacity: '1' }
+            },
+            glow: {
+              '0%': { boxShadow: '0 0 20px rgba(16, 185, 129, 0.3)' },
+              '100%': { boxShadow: '0 0 30px rgba(16, 185, 129, 0.5)' }
+            }
+          },
+          fontFamily: {
+            mono: ['JetBrains Mono', 'Fira Code', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'Liberation Mono', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    #asciiCanvas { 
+      width: 100%; 
+      height: 100%; 
+      transition: all 0.3s ease;
+      box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.1);
+    }
+    #asciiCanvas:hover {
+      box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.3);
+    }
+    .control-group {
+      transition: all 0.2s ease;
+    }
+    .control-group:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+    .tab {
+      transition: all 0.2s ease;
+    }
+    .tab.active {
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+      box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+    }
+    .glassmorphism {
+      background: rgba(17, 24, 39, 0.8);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, #10b981, #3b82f6);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      background: transparent;
+      cursor: pointer;
+    }
+    input[type="range"]::-webkit-slider-track {
+      background: #374151;
+      height: 4px;
+      border-radius: 2px;
+    }
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      background: #10b981;
+      height: 16px;
+      width: 16px;
+      border-radius: 50%;
+      border: 2px solid #0a0b0d;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+      transition: all 0.2s ease;
+    }
+    input[type="range"]::-webkit-slider-thumb:hover {
+      background: #059669;
+      transform: scale(1.1);
+    }
+    .export-modal {
+      backdrop-filter: blur(8px);
+      background: rgba(0, 0, 0, 0.6);
+    }
+    @keyframes matrix {
+      0% { transform: translateY(-100%); }
+      100% { transform: translateY(100vh); }
+    }
+    .matrix-bg {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0.03;
+      z-index: -1;
+      font-family: monospace;
+      color: #10b981;
+      font-size: 14px;
+      line-height: 1.2;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    /* 리사이저 핸들 */
+    .resize-handle {
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: rgba(16, 185, 129, 0.3);
+      cursor: col-resize;
+      opacity: 0;
+      transition: all 0.2s ease;
+      z-index: 10;
+    }
+    .resize-handle:hover,
+    .resize-handle.dragging {
+      opacity: 1;
+      background: rgba(16, 185, 129, 0.6);
+      width: 6px;
+    }
+    .resize-handle::after {
+      content: '';
+      position: absolute;
+      left: -2px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 10px;
+      height: 30px;
+      background: rgba(16, 185, 129, 0.5);
+      border-radius: 6px;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .resize-handle:hover::after,
+    .resize-handle.dragging::after {
+      opacity: 1;
+    }
+
+    /* 사이드바 최소/최대 너비 */
+    .sidebar {
+      min-width: 280px;
+      max-width: 600px;
+      width: 320px;
+    }
+
+    /* 커스텀 스크롤바 */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(55, 65, 81, 0.3);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: linear-gradient(135deg, #10b981, #059669);
+      border-radius: 4px;
+      border: 1px solid rgba(0, 0, 0, 0.3);
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: linear-gradient(135deg, #059669, #047857);
+    }
+    ::-webkit-scrollbar-corner {
+      background: rgba(17, 24, 39, 0.8);
+    }
+
+    /* Firefox 스크롤바 */
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: #10b981 rgba(55, 65, 81, 0.3);
+    }
+
+    /* 반응형 조정 */
+    @media (max-width: 1024px) {
+      .sidebar {
+        min-width: 260px;
+        width: 280px;
+      }
+    }
+    @media (max-width: 768px) {
+      .sidebar {
+        min-width: 240px;
+        width: 260px;
+      }
+    }
+  </style>
+</head>
+<body class="m-0 bg-bg text-fg font-mono relative">
+  <!-- Matrix Background -->
+  <div class="matrix-bg" id="matrixBg"></div>
+  
+  <!-- Header -->
+  <header class="glassmorphism sticky top-0 z-50 animate-fade-in">
+    <div class="flex flex-wrap items-center justify-between gap-3 px-6 py-4">
+      <div class="flex items-center gap-4">
+        <h1 class="m-0 text-2xl font-bold gradient-text">ASCII Art Studio</h1>
+        <div class="hidden md:flex text-xs text-muted items-center gap-2">
+          <div class="w-2 h-2 border-acc rounded-full animate-pulse"></div>
+          Real-time Processing
+        </div>
+      </div>
+      
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="flex gap-2">
+          <button id="playBtn" class="control-group rounded-xl bg-gradient-to-r from-acc to-acc-hover px-4 py-2 font-semibold text-white hover:shadow-lg transition-all duration-200 active:scale-95">
+            ▶ 재생
+          </button>
+          <button id="pauseBtn" class="control-group rounded-xl bg-card hover:bg-card-hover border border-border px-4 py-2 font-semibold text-fg transition-all duration-200">
+            ⏸ 일시정지
+          </button>
+          <button id="exportBtn" class="control-group rounded-xl bg-gradient-to-r from-info to-blue-600 px-4 py-2 font-semibold text-white hover:shadow-lg transition-all duration-200">
+            💾 내보내기
+          </button>
+        </div>
+
+        <!-- Quick Controls -->
+        <div class="flex flex-wrap gap-2">
+          <div class="control-group flex items-center gap-2 glassmorphism rounded-xl px-3 py-2">
+            <label class="text-xs text-muted whitespace-nowrap">크기</label>
+            <input id="fontSize" type="range" min="6" max="24" value="12" class="w-20"/>
+            <span id="fontSizeVal" class="text-xs text-acc font-bold min-w-[32px]">12px</span>
+          </div>
+          <div class="control-group flex items-center gap-2 glassmorphism rounded-xl px-3 py-2">
+            <label class="text-xs text-muted whitespace-nowrap">품질</label>
+            <input id="scale" type="range" min="4" max="16" value="8" class="w-20"/>
+            <span id="scaleVal" class="text-xs text-acc font-bold min-w-[24px]">8</span>
+          </div>
+          <label class="control-group flex items-center gap-2 glassmorphism rounded-xl px-3 py-2 cursor-pointer">
+            <input id="colorOn" type="checkbox" checked class="accent-acc">
+            <span class="text-xs text-muted">컬러</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <div class="flex h-[calc(100vh-88px)] overflow-hidden">
+    <!-- Canvas Area -->
+    <div class="flex-1 p-6 min-w-0">
+      <div class="h-full rounded-2xl bg-black border border-border relative overflow-hidden group">
+        <canvas id="asciiCanvas" class="rounded-2xl"></canvas>
+        <div class="absolute inset-0 bg-gradient-to-br from-acc/5 to-info/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
+      </div>
+    </div>
+
+    <!-- Control Panel -->
+    <aside class="sidebar relative bg-card border-l border-border flex-shrink-0" id="sidebar">
+      <!-- 리사이저 핸들 -->
+      <div class="resize-handle" id="resizeHandle"></div>
+      
+      <div class="h-full glassmorphism rounded-l-2xl p-6 flex flex-col gap-6 animate-slide-up overflow-y-auto">
+        <!-- Input Source -->
+        <section>
+          <h3 class="text-sm uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
+            📁 입력 소스
+          </h3>
+          <div class="flex gap-2 mb-4">
+            <button class="tab flex-1 rounded-lg px-3 py-2 text-sm font-medium" id="tabVideo">🎬 동영상</button>
+            <button class="tab flex-1 rounded-lg px-3 py-2 text-sm font-medium" id="tabImage">🖼️ 이미지</button>
+          </div>
+          
+          <div class="space-y-3">
+            <div class="flex gap-2">
+              <input type="url" id="url" placeholder="미디어 URL 입력..." 
+                     class="flex-1 rounded-lg bg-panel border border-border px-3 py-2 text-sm text-fg placeholder:text-muted focus:border-acc focus:outline-none transition-colors" />
+              <button id="loadUrl" class="control-group rounded-lg bg-card hover:bg-card-hover border border-border px-3 py-2 text-sm font-medium transition-all">
+                불러오기
+              </button>
+            </div>
+            
+            <input type="file" id="file" accept="video/*,image/*" 
+                   class="w-full text-xs text-muted file:mr-3 file:rounded-lg file:border-0 file:bg-card file:px-3 file:py-2 file:text-fg hover:file:bg-card-hover file:transition-colors"/>
+            
+            <div id="dropzone" class="rounded-xl border-2 border-dashed border-border p-6 text-center text-muted hover:border-acc hover:bg-acc/5 transition-all duration-300 cursor-pointer">
+              <div class="text-2xl mb-2">📂</div>
+              <div class="text-sm">파일을 여기에 드롭하세요</div>
+              <div class="text-xs opacity-70 mt-1">영상 또는 이미지</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Advanced Controls -->
+        <section>
+          <h3 class="text-sm uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
+            ⚙️ 고급 설정
+          </h3>
+          <div class="space-y-4">
+            <div class="control-group glassmorphism rounded-lg p-3">
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-xs text-muted">FPS</label>
+                <span id="fpsVal" class="text-xs text-acc font-bold">24</span>
+              </div>
+              <input id="fps" type="range" min="1" max="60" value="24" class="w-full"/>
+            </div>
+            
+            <div class="control-group glassmorphism rounded-lg p-3">
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-xs text-muted">명암 대비</label>
+                <span id="contrastVal" class="text-xs text-acc font-bold">1.00×</span>
+              </div>
+              <input id="contrast" type="range" min="0.5" max="2.0" step="0.05" value="1.0" class="w-full"/>
+            </div>
+            
+            <div class="control-group glassmorphism rounded-lg p-3">
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-xs text-muted">감마 보정</label>
+                <span id="gammaVal" class="text-xs text-acc font-bold">1.0</span>
+              </div>
+              <input id="gamma" type="range" min="0.5" max="2.2" step="0.1" value="1.0" class="w-full"/>
+            </div>
+          </div>
+        </section>
+
+        <!-- Character Set -->
+        <section>
+          <h3 class="text-sm uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
+            🔤 문자 스타일
+          </h3>
+          <select id="charset" class="w-full rounded-lg bg-panel border border-border px-3 py-2 text-sm text-fg focus:border-acc focus:outline-none transition-colors">
+            <option value=" .:-=+*#%@">기본 스타일</option>
+            <option value=" .'`^\",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$">세밀한 디테일</option>
+            <option value=" ░▒▓█">블록 스타일</option>
+            <option value="  .oO@">버블 스타일</option>
+            <option value="  .,:;-~=*+#%@">그라데이션</option>
+          </select>
+        </section>
+
+        <!-- Image Effects -->
+        <section>
+          <h3 class="text-sm uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
+            ✨ 이미지 효과
+          </h3>
+          <div class="space-y-3">
+            <label class="control-group flex items-center gap-3 glassmorphism rounded-lg p-3 cursor-pointer">
+              <input id="kbOn" type="checkbox" class="accent-acc">
+              <div class="flex-1">
+                <div class="text-sm text-fg">켄 번즈 효과</div>
+                <div class="text-xs text-muted">부드러운 줌/팬 애니메이션</div>
+              </div>
+            </label>
+            
+            <div class="control-group glassmorphism rounded-lg p-3" id="kbControls">
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-xs text-muted">애니메이션 속도</label>
+                <span id="kbSpeedVal" class="text-xs text-acc font-bold">0.30</span>
+              </div>
+              <input id="kbSpeed" type="range" min="0" max="100" value="30" class="w-full"/>
+            </div>
+
+            <label class="control-group flex items-center gap-3 glassmorphism rounded-lg p-3 cursor-pointer">
+              <input id="invertOn" type="checkbox" class="accent-acc">
+              <div class="flex-1">
+                <div class="text-sm text-fg">색상 반전</div>
+                <div class="text-xs text-muted">다크/라이트 모드 전환</div>
+              </div>
+            </label>
+          </div>
+        </section>
+
+        <!-- Keyboard Shortcuts -->
+        <section>
+          <h3 class="text-sm uppercase tracking-wider text-muted mb-3 flex items-center gap-2">
+            ⌨️ 단축키
+          </h3>
+          <div class="glassmorphism rounded-lg p-3 text-xs text-muted space-y-1">
+            <div class="flex justify-between"><span>Space</span><span>재생/일시정지</span></div>
+            <div class="flex justify-between"><span>F</span><span>전체화면</span></div>
+            <div class="flex justify-between"><span>[ / ]</span><span>글자 크기</span></div>
+            <div class="flex justify-between"><span>{ / }</span><span>품질 조절</span></div>
+            <div class="flex justify-between"><span>C</span><span>컬러 토글</span></div>
+            <div class="flex justify-between"><span>I</span><span>반전 토글</span></div>
+          </div>
+        </section>
+
+        <!-- Performance Info -->
+        <div class="glassmorphism rounded-lg p-3 text-xs">
+          <div class="text-muted mb-1">💡 성능 팁</div>
+          <div class="text-muted opacity-80 leading-relaxed">
+            느린 경우 품질 수치를 높이거나 FPS를 낮춰보세요. 모든 처리는 로컬에서 수행됩니다.
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Export Modal -->
+  <div id="exportModal" class="fixed inset-0 export-modal flex items-center justify-center z-50 hidden">
+    <div class="glassmorphism rounded-2xl p-6 max-w-md w-full mx-4 animate-slide-up">
+      <h2 class="text-xl font-bold gradient-text mb-4">📤 내보내기</h2>
+      
+      <div class="space-y-4">
+        <button id="exportImage" class="w-full control-group glassmorphism rounded-lg p-4 text-left hover:bg-card-hover transition-all">
+          <div class="flex items-center gap-3">
+            <div class="text-2xl">🖼️</div>
+            <div>
+              <div class="font-medium text-fg">이미지로 저장</div>
+              <div class="text-xs text-muted">현재 프레임을 PNG로 저장</div>
+            </div>
+          </div>
+        </button>
+        
+        <button id="exportText" class="w-full control-group glassmorphism rounded-lg p-4 text-left hover:bg-card-hover transition-all">
+          <div class="flex items-center gap-3">
+            <div class="text-2xl">📝</div>
+            <div>
+              <div class="font-medium text-fg">텍스트로 복사</div>
+              <div class="text-xs text-muted">ASCII 텍스트를 클립보드에 복사</div>
+            </div>
+          </div>
+        </button>
+        
+        <button id="exportHTML" class="w-full control-group glassmorphism rounded-lg p-4 text-left hover:bg-card-hover transition-all">
+          <div class="flex items-center gap-3">
+            <div class="text-2xl">🌐</div>
+            <div>
+              <div class="font-medium text-fg">HTML로 저장</div>
+              <div class="text-xs text-muted">컬러 정보를 포함한 HTML 파일</div>
+            </div>
+          </div>
+        </button>
+      </div>
+      
+      <div class="flex gap-3 mt-6">
+        <button id="closeModal" class="flex-1 control-group rounded-lg bg-card hover:bg-card-hover border border-border px-4 py-2 text-sm font-medium transition-all">
+          취소
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Hidden Elements -->
+  <video id="video" class="hidden" playsinline muted></video>
+  <img id="img" class="hidden" alt="source" />
+  <canvas id="capture" class="hidden"></canvas>
+
+  <script>
+    // DOM Elements
+    const video = document.getElementById('video');
+    const imgEl = document.getElementById('img');
+    const capture = document.getElementById('capture');
+    const asciiCanvas = document.getElementById('asciiCanvas');
+    const ctxAscii = asciiCanvas.getContext('2d');
+    const ctxCap = capture.getContext('2d', { willReadFrequently: true });
+    const sidebar = document.getElementById('sidebar');
+    const resizeHandle = document.getElementById('resizeHandle');
+
+    // UI Controls
+    const playBtn = document.getElementById('playBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const exportBtn = document.getElementById('exportBtn');
+    const fileInput = document.getElementById('file');
+    const urlInput = document.getElementById('url');
+    const loadUrlBtn = document.getElementById('loadUrl');
+    const tabVideo = document.getElementById('tabVideo');
+    const tabImage = document.getElementById('tabImage');
+    const dropzone = document.getElementById('dropzone');
+
+    // Range Controls
+    const fontSize = document.getElementById('fontSize');
+    const fontSizeVal = document.getElementById('fontSizeVal');
+    const scale = document.getElementById('scale');
+    const scaleVal = document.getElementById('scaleVal');
+    const fps = document.getElementById('fps');
+    const fpsVal = document.getElementById('fpsVal');
+    const gamma = document.getElementById('gamma');
+    const gammaVal = document.getElementById('gammaVal');
+    const contrast = document.getElementById('contrast');
+    const contrastVal = document.getElementById('contrastVal');
+    const colorOn = document.getElementById('colorOn');
+    const invertOn = document.getElementById('invertOn');
+    const charsetSel = document.getElementById('charset');
+
+    // Image Effects
+    const kbOn = document.getElementById('kbOn');
+    const kbSpeed = document.getElementById('kbSpeed');
+    const kbSpeedVal = document.getElementById('kbSpeedVal');
+
+    // Export Modal
+    const exportModal = document.getElementById('exportModal');
+    const exportImage = document.getElementById('exportImage');
+    const exportText = document.getElementById('exportText');
+    const exportHTML = document.getElementById('exportHTML');
+    const closeModal = document.getElementById('closeModal');
+
+    // State
+    let mode = 'video';
+    let lastTime = 0;
+    let targetDelta = 1000 / parseInt(fps.value, 10);
+    let running = false;
+    let charSet = charsetSel.value;
+    let hasSource = false;
+    let tKB = 0;
+    let currentASCII = '';
+    let currentColoredHTML = '';
+
+    // 사이드바 리사이징
+    let isResizing = false;
+    let startX = 0;
+    let startWidth = 0;
+
+    resizeHandle.addEventListener('mousedown', (e) => {
+      isResizing = true;
+      startX = e.clientX;
+      startWidth = sidebar.offsetWidth;
+      resizeHandle.classList.add('dragging');
+      document.body.style.cursor = 'col-resize';
+      document.body.style.userSelect = 'none';
+    });
+
+    // Matrix Background Effect
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isResizing) return;
+      
+      const newWidth = startWidth - (e.clientX - startX);
+      const minWidth = 280;
+      const maxWidth = Math.min(600, window.innerWidth * 0.5);
+      
+      if (newWidth >= minWidth && newWidth <= maxWidth) {
+        sidebar.style.width = newWidth + 'px';
+      }
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isResizing) {
+        isResizing = false;
+        resizeHandle.classList.remove('dragging');
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        resizeCanvas();
+      }
+    });
+    function initMatrixBG() {
+      const matrixBg = document.getElementById('matrixBg');
+      const chars = '01アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン';
+      const columns = Math.floor(window.innerWidth / 20);
+      
+      for (let i = 0; i < columns; i++) {
+        const column = document.createElement('div');
+        column.style.position = 'absolute';
+        column.style.left = `${i * 20}px`;
+        column.style.animation = `matrix 20s linear infinite`;
+        column.style.animationDelay = `${Math.random() * 20}s`;
+        column.textContent = chars[Math.floor(Math.random() * chars.length)];
+        matrixBg.appendChild(column);
+      }
+    }
+
+    // Mode Management
+    function setMode(m) {
+      mode = m;
+      document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+      if (m === 'video') {
+        tabVideo.classList.add('active');
+        running = true;
+      } else {
+        tabImage.classList.add('active');
+        running = kbOn.checked;
+      }
+    }
+
+    // Canvas Resize
+    function resizeCanvas() {
+      const rect = asciiCanvas.getBoundingClientRect();
+      asciiCanvas.width = Math.max(1, Math.floor(rect.width));
+      asciiCanvas.height = Math.max(1, Math.floor(rect.height));
+      ctxAscii.textBaseline = 'top';
+      updateFont();
+      if (mode === 'image' && hasSource) renderFrame();
+    }
+
+    function updateFont() {
+      ctxAscii.font = `${fontSize.value}px JetBrains Mono, Fira Code, ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace`;
+    }
+
+    // Event Listeners
+    tabVideo.addEventListener('click', () => setMode('video'));
+    tabImage.addEventListener('click', () => setMode('image'));
+
+    // File Handling
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (file.type.startsWith('image/')) {
+        loadImage(URL.createObjectURL(file));
+      } else if (file.type.startsWith('video/')) {
+        loadVideo(URL.createObjectURL(file));
+      }
+    });
+
+    // Drag & Drop
+    ['dragenter', 'dragover'].forEach(ev => 
+      dropzone.addEventListener(ev, e => {
+        e.preventDefault();
+        dropzone.classList.add('border-acc', 'bg-acc/10');
+      })
+    );
+
+    ['dragleave', 'drop'].forEach(ev => 
+      dropzone.addEventListener(ev, e => {
+        e.preventDefault();
+        dropzone.classList.remove('border-acc', 'bg-acc/10');
+      })
+    );
+
+    dropzone.addEventListener('drop', (e) => {
+      const file = e.dataTransfer.files?.[0];
+      if (!file) return;
+      if (file.type.startsWith('image/')) loadImage(URL.createObjectURL(file));
+      else if (file.type.startsWith('video/')) loadVideo(URL.createObjectURL(file));
+    });
+
+    // URL Loading
+    loadUrlBtn.addEventListener('click', () => {
+      const v = urlInput.value.trim();
+      if (!v) return;
+      const lower = v.split('?')[0].toLowerCase();
+      if (lower.match(/\.(png|jpg|jpeg|gif|webp|bmp|svg)$/)) loadImage(v);
+      else loadVideo(v);
+    });
+
+    function loadVideo(src) {
+      setMode('video');
+      stop();
+      imgEl.removeAttribute('src');
+      video.src = src;
+      video.crossOrigin = 'anonymous';
+      video.muted = true;
+      video.play().then(() => {
+        hasSource = true;
+        running = true;
+        requestAnimationFrame(loop);
+      }).catch(() => {});
+    }
+
+    function loadImage(src) {
+      setMode('image');
+      stop();
+      video.removeAttribute('src');
+      video.srcObject = null;
+      video.pause();
+      imgEl.crossOrigin = 'anonymous';
+      imgEl.onload = () => {
+        hasSource = true;
+        tKB = 0;
+        renderFrame();
+        if (kbOn.checked) {
+          running = true;
+          requestAnimationFrame(loop);
+        }
+      };
+      imgEl.src = src;
+    }
+
+    // Controls
+    playBtn.addEventListener('click', () => {
+      if (mode === 'video') {
+        video.play();
+        running = true;
+        requestAnimationFrame(loop);
+      } else {
+        running = true;
+        requestAnimationFrame(loop);
+      }
+    });
+
+    pauseBtn.addEventListener('click', () => {
+      if (mode === 'video') video.pause();
+      running = false;
+    });
+
+    // Range Controls with smooth updates
+    fontSize.addEventListener('input', () => {
+      fontSizeVal.textContent = fontSize.value + 'px';
+      updateFont();
+      if (mode === 'image') renderFrame();
+    });
+
+    scale.addEventListener('input', () => {
+      scaleVal.textContent = scale.value;
+      if (mode === 'image') renderFrame();
+    });
+
+    fps.addEventListener('input', () => {
+      fpsVal.textContent = fps.value;
+      targetDelta = 1000 / parseInt(fps.value, 10);
+    });
+
+    gamma.addEventListener('input', () => {
+      gammaVal.textContent = gamma.value;
+      if (mode === 'image') renderFrame();
+    });
+
+    contrast.addEventListener('input', () => {
+      contrastVal.textContent = parseFloat(contrast.value).toFixed(2) + '×';
+      if (mode === 'image') renderFrame();
+    });
+
+    charsetSel.addEventListener('change', () => {
+      charSet = charsetSel.value;
+      if (mode === 'image') renderFrame();
+    });
+
+    kbOn.addEventListener('change', () => {
+      if (mode === 'image') {
+        running = kbOn.checked;
+        if (running) requestAnimationFrame(loop);
+      }
+    });
+
+    kbSpeed.addEventListener('input', () => {
+      kbSpeedVal.textContent = (kbSpeed.value / 100).toFixed(2);
+    });
+
+    colorOn.addEventListener('change', () => {
+      if (mode === 'image') renderFrame();
+    });
+
+    invertOn.addEventListener('change', () => {
+      if (mode === 'image') renderFrame();
+    });
+
+    // Keyboard shortcuts
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (running) {
+          if (mode === 'video') video.pause();
+          running = false;
+        } else {
+          if (mode === 'video') video.play();
+          running = true;
+          requestAnimationFrame(loop);
+        }
+      }
+      if (e.key === 'f' || e.key === 'F') toggleFullscreen();
+      if (e.key === '[') {
+        fontSize.value = Math.max(6, (+fontSize.value - 1));
+        fontSize.dispatchEvent(new Event('input'));
+      }
+      if (e.key === ']') {
+        fontSize.value = Math.min(24, (+fontSize.value + 1));
+        fontSize.dispatchEvent(new Event('input'));
+      }
+      if (e.key === '{') {
+        scale.value = Math.max(4, (+scale.value - 1));
+        scale.dispatchEvent(new Event('input'));
+      }
+      if (e.key === '}') {
+        scale.value = Math.min(16, (+scale.value + 1));
+        scale.dispatchEvent(new Event('input'));
+      }
+      if (e.key === 'c' || e.key === 'C') {
+        colorOn.checked = !colorOn.checked;
+        colorOn.dispatchEvent(new Event('change'));
+      }
+      if (e.key === 'i' || e.key === 'I') {
+        invertOn.checked = !invertOn.checked;
+        invertOn.dispatchEvent(new Event('change'));
+      }
+    });
+
+    function toggleFullscreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen?.();
+      } else {
+        document.exitFullscreen?.();
+      }
+    }
+
+    // Export functionality
+    exportBtn.addEventListener('click', () => {
+      exportModal.classList.remove('hidden');
+    });
+
+    closeModal.addEventListener('click', () => {
+      exportModal.classList.add('hidden');
+    });
+
+    exportModal.addEventListener('click', (e) => {
+      if (e.target === exportModal) {
+        exportModal.classList.add('hidden');
+      }
+    });
+
+    exportImage.addEventListener('click', () => {
+      const link = document.createElement('a');
+      link.download = `ascii-art-${Date.now()}.png`;
+      link.href = asciiCanvas.toDataURL();
+      link.click();
+      exportModal.classList.add('hidden');
+      
+      // Show success notification
+      showNotification('🎉 이미지가 성공적으로 저장되었습니다!', 'success');
+    });
+
+    exportText.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(currentASCII);
+        exportModal.classList.add('hidden');
+        showNotification('📋 ASCII 텍스트가 클립보드에 복사되었습니다!', 'success');
+      } catch (err) {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = currentASCII;
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+        exportModal.classList.add('hidden');
+        showNotification('📋 ASCII 텍스트가 클립보드에 복사되었습니다!', 'success');
+      }
+    });
+
+    exportHTML.addEventListener('click', () => {
+      const htmlContent = generateHTMLExport();
+      const blob = new Blob([htmlContent], { type: 'text/html' });
+      const link = document.createElement('a');
+      link.download = `ascii-art-${Date.now()}.html`;
+      link.href = URL.createObjectURL(blob);
+      link.click();
+      exportModal.classList.add('hidden');
+      
+      showNotification('🌐 HTML 파일이 성공적으로 저장되었습니다!', 'success');
+    });
+
+    function generateHTMLExport() {
+      return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASCII Art Export</title>
+    <style>
+        body {
+            background: linear-gradient(135deg, #0a0b0d 0%, #111827 100%);
+            color: #f1f5f9;
+            font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+            margin: 0;
+            padding: 20px;
+            line-height: 1;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            background: rgba(17, 24, 39, 0.8);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.3);
+        }
+        .ascii-container {
+            white-space: pre;
+            font-size: ${fontSize.value}px;
+            text-align: center;
+            overflow: auto;
+            background: #000;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        .header h1 {
+            background: linear-gradient(135deg, #10b981, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin: 0 0 10px 0;
+            font-size: 2.5em;
+        }
+        .header p {
+            color: #94a3b8;
+            margin: 0;
+            font-size: 0.9em;
+        }
+        .settings {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+            font-size: 0.8em;
+            color: #94a3b8;
+        }
+        .settings span {
+            background: rgba(16, 185, 129, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .container { padding: 20px; }
+            .ascii-container { font-size: ${Math.max(8, parseInt(fontSize.value) - 2)}px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎨 ASCII Art Studio</h1>
+            <p>Generated on ${new Date().toLocaleString('ko-KR')}</p>
+        </div>
+        <div class="settings">
+            <span>Font Size: ${fontSize.value}px</span>
+            <span>Quality: ${scale.value}</span>
+            <span>Colors: ${colorOn.checked ? 'Enabled' : 'Disabled'}</span>
+            <span>Character Set: ${charsetSel.selectedOptions[0].text}</span>
+        </div>
+        <div class="ascii-container">${currentColoredHTML}</div>
+    </div>
+</body>
+</html>`;
+    }
+
+    function showNotification(message, type = 'info') {
+      const notification = document.createElement('div');
+      const colors = {
+        success: 'bg-gradient-to-r from-green-500 to-green-600',
+        error: 'bg-gradient-to-r from-red-500 to-red-600',
+        info: 'bg-gradient-to-r from-blue-500 to-blue-600'
+      };
+      
+      notification.className = `fixed top-4 right-4 ${colors[type]} text-white px-6 py-3 rounded-xl shadow-lg z-50 animate-slide-up`;
+      notification.textContent = message;
+      
+      document.body.appendChild(notification);
+      
+      setTimeout(() => {
+        notification.style.opacity = '0';
+        notification.style.transform = 'translateY(-20px)';
+        setTimeout(() => notification.remove(), 300);
+      }, 3000);
+    }
+
+    // Main rendering loop
+    function loop(ts) {
+      if (!running) return;
+      if (ts - lastTime < targetDelta) {
+        return requestAnimationFrame(loop);
+      }
+      lastTime = ts;
+      if (!hasSource) return requestAnimationFrame(loop);
+      renderFrame(ts);
+      requestAnimationFrame(loop);
+    }
+
+    function stop() {
+      running = false;
+    }
+
+    function renderFrame(ts = 0) {
+      const w = asciiCanvas.width;
+      const h = asciiCanvas.height;
+      const cell = parseInt(scale.value, 10);
+      const fsize = parseInt(fontSize.value, 10);
+
+      let sourceW = 640, sourceH = 360;
+      if (mode === 'video' && video.readyState >= 2) {
+        sourceW = video.videoWidth || sourceW;
+        sourceH = video.videoHeight || sourceH;
+      }
+      if (mode === 'image' && imgEl.naturalWidth) {
+        sourceW = imgEl.naturalWidth;
+        sourceH = imgEl.naturalHeight;
+      }
+
+      const aspect = sourceW / sourceH;
+      let dw = w, dh = Math.floor(w / aspect);
+      if (dh > h) {
+        dh = h;
+        dw = Math.floor(h * aspect);
+      }
+
+      // Prepare capture canvas
+      capture.width = dw;
+      capture.height = dh;
+
+      if (mode === 'video') {
+        ctxCap.drawImage(video, 0, 0, dw, dh);
+      } else {
+        // Ken Burns effect
+        if (kbOn.checked) {
+          tKB += (kbSpeed.value / 1000);
+        }
+        const zoom = 1 + 0.05 * Math.sin(tKB * 2 * Math.PI);
+        const panX = (Math.sin(tKB * 0.7) * 0.5 + 0.5) * (sourceW - sourceW / zoom);
+        const panY = (Math.cos(tKB * 0.9) * 0.5 + 0.5) * (sourceH - sourceH / zoom);
+        const sx = panX, sy = panY, sw = sourceW / zoom, sh = sourceH / zoom;
+        ctxCap.drawImage(imgEl, sx, sy, sw, sh, 0, 0, dw, dh);
+      }
+
+      const img = ctxCap.getImageData(0, 0, dw, dh);
+      const data = img.data;
+
+      // Clear ASCII canvas with gradient background
+      ctxAscii.clearRect(0, 0, w, h);
+      const gradient = ctxAscii.createLinearGradient(0, 0, 0, h);
+      gradient.addColorStop(0, '#0a0b0d');
+      gradient.addColorStop(1, '#111827');
+      ctxAscii.fillStyle = gradient;
+      ctxAscii.fillRect(0, 0, w, h);
+
+      const ox = Math.floor((w - dw) / 2);
+      const oy = Math.floor((h - dh) / 2);
+
+      updateFont();
+      ctxAscii.textBaseline = 'top';
+
+      const gammaF = parseFloat(gamma.value);
+      const contrastF = parseFloat(contrast.value);
+      const inv = invertOn.checked ? 1 : 0;
+      const chars = charSet;
+      const clen = chars.length - 1;
+
+      const yStep = cell * 2;
+      const xStep = cell;
+
+      let asciiText = '';
+      let coloredHTML = '';
+
+      for (let y = 0; y < dh; y += yStep) {
+        let line = '';
+        let colorLine = '';
+        for (let x = 0; x < dw; x += xStep) {
+          const px = ((y * dw) + x) * 4;
+          let r = data[px], g = data[px + 1], b = data[px + 2];
+          
+          // Improved luminance calculation (BT.709)
+          let L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+          L = (((L / 255 - 0.5) * contrastF) + 0.5);
+          L = Math.pow(Math.max(0, Math.min(1, L)), gammaF);
+          if (inv) L = 1 - L;
+          
+          const idx = Math.max(0, Math.min(clen, Math.round(L * clen)));
+          const ch = chars[idx];
+          line += ch;
+          
+          // HTML에서 특수문자 이스케이프
+          let escapedCh = ch;
+          if (ch === '<') escapedCh = '&lt;';
+          else if (ch === '>') escapedCh = '&gt;';
+          else if (ch === '&') escapedCh = '&amp;';
+          else if (ch === ' ') escapedCh = '&nbsp;';
+          
+          if (colorOn.checked) {
+            ctxAscii.fillStyle = `rgb(${r},${g},${b})`;
+            colorLine += `<span style="color:rgb(${r},${g},${b})">${escapedCh}</span>`;
+          } else {
+            const gval = Math.round(L * 255);
+            ctxAscii.fillStyle = `rgb(${gval},${gval},${gval})`;
+            colorLine += `<span style="color:rgb(${gval},${gval},${gval})">${escapedCh}</span>`;
+          }
+          
+          ctxAscii.fillText(ch, ox + x, oy + y);
+        }
+        asciiText += line + '\n';
+        coloredHTML += colorLine + '\n';
+      }
+      
+      currentASCII = asciiText;
+      currentColoredHTML = coloredHTML;
+    }
+
+    // Initialize
+    window.addEventListener('resize', resizeCanvas);
+    initMatrixBG();
+    resizeCanvas();
+
+    // Demo content
+    (function bootstrapDemo() {
+      const demo = document.createElement('canvas');
+      const dctx = demo.getContext('2d');
+      let t = 0;
+      demo.width = 320;
+      demo.height = 180;
+      
+      function drawDemo() {
+        const { width, height } = demo;
+        
+        // Animated gradient background
+        const gradient = dctx.createLinearGradient(0, 0, width, height);
+        gradient.addColorStop(0, `hsl(${(t * 2) % 360}, 70%, 10%)`);
+        gradient.addColorStop(0.5, `hsl(${(t * 3 + 120) % 360}, 60%, 15%)`);
+        gradient.addColorStop(1, `hsl(${(t * 4 + 240) % 360}, 80%, 8%)`);
+        dctx.fillStyle = gradient;
+        dctx.fillRect(0, 0, width, height);
+        
+        // Animated particles
+        for (let i = 0; i < 50; i++) {
+          const x = (Math.sin((t + i) * 0.07 + i) * 0.5 + 0.5) * width;
+          const y = (Math.cos((t + i) * 0.05 + i) * 0.5 + 0.5) * height;
+          const size = 3 + Math.sin(t * 0.1 + i) * 2;
+          
+          const particleGradient = dctx.createRadialGradient(x, y, 0, x, y, size);
+          particleGradient.addColorStop(0, `hsla(${(i * 15 + t * 5) % 360}, 90%, 70%, 0.8)`);
+          particleGradient.addColorStop(1, `hsla(${(i * 15 + t * 5) % 360}, 90%, 70%, 0)`);
+          
+          dctx.fillStyle = particleGradient;
+          dctx.beginPath();
+          dctx.arc(x, y, size, 0, Math.PI * 2);
+          dctx.fill();
+        }
+        
+        // Welcome text
+        dctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        dctx.font = 'bold 24px sans-serif';
+        dctx.textAlign = 'center';
+        dctx.fillText('ASCII Art Studio', width / 2, height / 2 - 20);
+        
+        dctx.fillStyle = 'rgba(16, 185, 129, 0.8)';
+        dctx.font = '14px sans-serif';
+        dctx.fillText('미디어를 드롭하거나 URL을 입력하세요 →', width / 2, height / 2 + 10);
+        
+        t += 1;
+        requestAnimationFrame(drawDemo);
+      }
+      
+      drawDemo();
+      const stream = demo.captureStream(30);
+      video.srcObject = stream;
+      video.play();
+      setMode('video');
+      hasSource = true;
+      running = true;
+      requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+</html>

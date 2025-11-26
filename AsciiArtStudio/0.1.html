@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Color ASCII Art (Tailwind)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Tailwind CDN config: custom palette matching the original
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            bg: '#0b0e11',
+            fg: '#e6edf3',
+            muted: '#9da7b3',
+            acc: '#50c878',
+            card: '#0f1318',
+            border: '#202833',
+            panel: '#0b0f14'
+          },
+          borderRadius: { 'xl2': '1rem' },
+          fontFamily: {
+            mono: [
+              'ui-monospace','SFMono-Regular','Menlo','Consolas','Liberation Mono','monospace'
+            ]
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Canvas should stretch to its parent */
+    #asciiCanvas{ width:100%; height:100%; }
+  </style>
+</head>
+<body class="m-0 bg-bg text-fg font-mono">
+  <!-- Header -->
+  <header class="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
+    <h1 class="m-0 text-lg font-bold tracking-wide">Color ASCII Art Generator</h1>
+    <div class="flex flex-wrap items-center gap-2">
+      <button id="playBtn" class="rounded-xl bg-acc px-3 py-2 font-semibold text-[#06210f] hover:brightness-95">재생</button>
+      <button id="pauseBtn" class="rounded-xl border border-border bg-[#1b222c] px-3 py-2 font-semibold text-fg hover:bg-[#202733]">일시정지</button>
+
+      <!-- Controls -->
+      <div class="flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2">
+        <label class="text-xs text-muted">문자 크기</label>
+        <input id="fontSize" type="range" min="6" max="24" value="12" class="w-40"/>
+        <span id="fontSizeVal" class="text-xs text-muted">12px</span>
+      </div>
+      <div class="flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2">
+        <label class="text-xs text-muted">해상도(샘플링)</label>
+        <input id="scale" type="range" min="4" max="16" value="8" class="w-40"/>
+        <span id="scaleVal" class="text-xs text-muted">8px</span>
+      </div>
+      <div class="flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2">
+        <label class="text-xs text-muted">FPS</label>
+        <input id="fps" type="range" min="1" max="60" value="24" class="w-40"/>
+        <span id="fpsVal" class="text-xs text-muted">24</span>
+      </div>
+      <div class="flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2">
+        <label class="text-xs text-muted">명암</label>
+        <input id="contrast" type="range" min="0.5" max="2.0" step="0.05" value="1.0" class="w-40"/>
+        <span id="contrastVal" class="text-xs text-muted">1.00×</span>
+      </div>
+      <div class="flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2">
+        <label class="text-xs text-muted">감마</label>
+        <input id="gamma" type="range" min="0.5" max="2.2" step="0.1" value="1.0" class="w-40"/>
+        <span id="gammaVal" class="text-xs text-muted">1.0</span>
+      </div>
+      <label class="flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2">
+        <input id="colorOn" type="checkbox" checked>
+        <span class="text-xs text-muted">컬러</span>
+      </label>
+      <label class="flex items-center gap-2 rounded-2xl border border-border bg-card px-3 py-2">
+        <input id="invertOn" type="checkbox">
+        <span class="text-xs text-muted">반전</span>
+      </label>
+    </div>
+  </header>
+
+  <!-- Stage -->
+  <div id="stage" class="relative h-[calc(100vh-96px)]">
+    <div class="absolute inset-0 grid grid-cols-1 gap-2 p-2 md:[grid-template-columns:1fr_360px]">
+      <canvas id="asciiCanvas" class="rounded-2xl bg-black"></canvas>
+      <aside class="flex flex-col gap-3 rounded-2xl border border-border bg-card p-3">
+        <h3 class="m-0 text-xs uppercase tracking-[0.2em] text-muted">입력</h3>
+        <div class="flex gap-2">
+          <button class="tab active rounded-lg border border-border bg-panel px-3 py-1 text-sm text-muted" id="tabVideo">동영상</button>
+          <button class="tab rounded-lg border border-border bg-panel px-3 py-1 text-sm text-muted" id="tabImage">이미지</button>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="url" id="url" placeholder="미디어 URL (동일 출처 또는 CORS 허용)" class="flex-1 rounded-lg border border-border bg-panel px-3 py-2 text-fg placeholder:text-muted" />
+          <button id="loadUrl" class="rounded-xl border border-border bg-[#1b222c] px-3 py-2 font-semibold text-fg hover:bg-[#202733]">불러오기</button>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="file" id="file" accept="video/*,image/*" class="w-full text-sm text-muted file:mr-3 file:rounded-md file:border-0 file:bg-[#1b222c] file:px-3 file:py-2 file:text-fg hover:file:bg-[#202733]"/>
+        </div>
+        <div id="dropzone" class="drop rounded-xl border border-dashed border-[#2a3645] p-4 text-center text-muted">여기에 파일을 드롭하세요 (영상·이미지)</div>
+        <div class="text-xs text-muted">모든 처리는 브라우저 로컬에서 수행됩니다.</div>
+        <div class="h-px bg-border"></div>
+
+        <h3 class="m-0 text-xs uppercase tracking-[0.2em] text-muted">문자 집합</h3>
+        <select id="charset" class="rounded-lg border border-border bg-panel px-3 py-2 text-fg">
+          <option value=" .:-=+*#%@">기본: .:-=+*#%@</option>
+          <option value=" .'`^\",:;Il!i~+_-?][}{1)(|\\/tfjrxnuvczXYUJCLQ0OZmwqpdbkhao*#MW&8%B@$">세밀함(긴)</option>
+          <option value=" ░▒▓█">블록: ░▒▓█</option>
+          <option value="  .oO@">버블: .oO@</option>
+          <option value="  .,:;-~=*+#%@">그라데이션(중)</option>
+        </select>
+
+        <div class="h-px bg-border"></div>
+        <h3 class="m-0 text-xs uppercase tracking-[0.2em] text-muted">이미지 전용</h3>
+        <div class="flex items-center gap-2">
+          <label class="min-w-[88px] text-xs text-muted">켄 번즈</label>
+          <input id="kbOn" type="checkbox">
+          <span class="text-xs text-muted">부드러운 팬/줌 애니메이션</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="min-w-[88px] text-xs text-muted">속도</label>
+          <input id="kbSpeed" type="range" min="0" max="100" value="30" class="w-40">
+          <span id="kbSpeedVal" class="text-xs text-muted">0.30</span>
+        </div>
+
+        <div class="h-px bg-border"></div>
+        <h3 class="m-0 text-xs uppercase tracking-[0.2em] text-muted">키보드</h3>
+        <div class="text-xs text-muted">Space: 재생/일시정지 · F: 전체화면 · [ / ]: 글자 크기 · { / }: 샘플링 · C: 컬러 · I: 반전</div>
+
+        <div class="h-px bg-border"></div>
+        <h3 class="m-0 text-xs uppercase tracking-[0.2em] text-muted">팁</h3>
+        <ul class="m-0 list-disc pl-5 text-xs leading-relaxed text-muted">
+          <li>성능이 낮으면 샘플링을 키우거나 FPS를 낮추세요.</li>
+          <li>URL 재생은 CORS가 허용된 파일만 가능합니다.</li>
+          <li>컬러를 끄면 더 빠릅니다. 이미지 모드는 정지 상태에서도 즉시 변환됩니다.</li>
+        </ul>
+        <footer class="note absolute bottom-2 right-2 text-xs text-muted opacity-80 md:right-[370px]">HTML/CSS/JS만 사용 · 비디오는 프레임 변환, 이미지는 즉시 변환 또는 켄 번즈 애니메이션.</footer>
+      </aside>
+    </div>
+  </div>
+
+  <!-- 숨김 원본 소스들 -->
+  <video id="video" class="hidden" playsinline muted></video>
+  <img id="img" class="hidden" alt="source" />
+  <canvas id="capture" class="hidden"></canvas>
+
+  <script>
+    const video = document.getElementById('video');
+    const imgEl = document.getElementById('img');
+    const capture = document.getElementById('capture');
+    const asciiCanvas = document.getElementById('asciiCanvas');
+    const ctxAscii = asciiCanvas.getContext('2d');
+    const ctxCap = capture.getContext('2d', { willReadFrequently:true });
+
+    // UI
+    const playBtn = document.getElementById('playBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const fileInput = document.getElementById('file');
+    const urlInput = document.getElementById('url');
+    const loadUrlBtn = document.getElementById('loadUrl');
+    const tabVideo = document.getElementById('tabVideo');
+    const tabImage = document.getElementById('tabImage');
+    const dropzone = document.getElementById('dropzone');
+
+    const fontSize = document.getElementById('fontSize');
+    const fontSizeVal = document.getElementById('fontSizeVal');
+    const scale = document.getElementById('scale');
+    const scaleVal = document.getElementById('scaleVal');
+    const fps = document.getElementById('fps');
+    const fpsVal = document.getElementById('fpsVal');
+    const gamma = document.getElementById('gamma');
+    const gammaVal = document.getElementById('gammaVal');
+    const contrast = document.getElementById('contrast');
+    const contrastVal = document.getElementById('contrastVal');
+    const colorOn = document.getElementById('colorOn');
+    const invertOn = document.getElementById('invertOn');
+    const charsetSel = document.getElementById('charset');
+
+    // Image-only
+    const kbOn = document.getElementById('kbOn');
+    const kbSpeed = document.getElementById('kbSpeed');
+    const kbSpeedVal = document.getElementById('kbSpeedVal');
+
+    // State
+    let mode = 'video'; // 'video' | 'image'
+    let lastTime = 0;
+    let targetDelta = 1000 / parseInt(fps.value,10);
+    let running = false; // for video (play/pause)
+    let charSet = charsetSel.value;
+    let hasSource = false;
+
+    // Ken Burns params
+    let tKB = 0;
+
+    function setMode(m){
+      mode = m;
+      tabVideo.classList.toggle('bg-[#15202b]');
+      tabVideo.classList.toggle('text-fg');
+      tabImage.classList.toggle('bg-[#15202b]');
+      tabImage.classList.toggle('text-fg');
+      tabVideo.classList.toggle('text-muted');
+      tabImage.classList.toggle('text-muted');
+      if(m==='image'){ running = kbOn.checked; }
+    }
+
+    tabVideo.addEventListener('click', ()=> setMode('video'));
+    tabImage.addEventListener('click', ()=> setMode('image'));
+
+    // Resize canvas to container
+    function resizeCanvas(){
+      const rect = asciiCanvas.getBoundingClientRect();
+      asciiCanvas.width = Math.max(1, Math.floor(rect.width));
+      asciiCanvas.height = Math.max(1, Math.floor(rect.height));
+      ctxAscii.textBaseline = 'top';
+      ctxAscii.font = `${fontSize.value}px ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace`;
+      if(mode==='image' && hasSource) renderFrame();
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // File input
+    fileInput.addEventListener('change', (e)=>{
+      const file = e.target.files?.[0];
+      if(!file) return;
+      if(file.type.startsWith('image/')){
+        loadImage(URL.createObjectURL(file));
+      } else if(file.type.startsWith('video/')){
+        loadVideo(URL.createObjectURL(file));
+      }
+    });
+
+    // Drag & drop
+    ;['dragenter','dragover'].forEach(ev=>dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.classList.add('bg-[#0f171f]','border-acc','text-fg'); }));
+    ;['dragleave','drop'].forEach(ev=>dropzone.addEventListener(ev, e=>{ e.preventDefault(); dropzone.classList.remove('bg-[#0f171f]','border-acc','text-fg'); }));
+    dropzone.addEventListener('drop', (e)=>{
+      const file = e.dataTransfer.files?.[0];
+      if(!file) return;
+      if(file.type.startsWith('image/')) loadImage(URL.createObjectURL(file));
+      else if(file.type.startsWith('video/')) loadVideo(URL.createObjectURL(file));
+    });
+
+    // URL input
+    loadUrlBtn.addEventListener('click', ()=>{
+      const v = urlInput.value.trim(); if(!v) return;
+      const lower = v.split('?')[0].toLowerCase();
+      if(lower.match(/\.(png|jpg|jpeg|gif|webp|bmp|svg)$/)) loadImage(v);
+      else loadVideo(v);
+    });
+
+    function loadVideo(src){
+      setMode('video');
+      stop();
+      imgEl.removeAttribute('src');
+      video.src = src; video.crossOrigin='anonymous'; video.muted = true;
+      video.play().then(()=>{ hasSource = true; running = true; requestAnimationFrame(loop); }).catch(()=>{});
+    }
+
+    function loadImage(src){
+      setMode('image');
+      stop();
+      video.removeAttribute('src'); video.srcObject = null; video.pause();
+      imgEl.crossOrigin = 'anonymous';
+      imgEl.onload = ()=>{ hasSource = true; tKB = 0; renderFrame(); if(kbOn.checked){ running = true; requestAnimationFrame(loop); } };
+      imgEl.src = src;
+    }
+
+    // Playback controls
+    playBtn.addEventListener('click', ()=>{ if(mode==='video'){ video.play(); running = true; requestAnimationFrame(loop); } else { running = true; requestAnimationFrame(loop); } });
+    pauseBtn.addEventListener('click', ()=>{ if(mode==='video'){ video.pause(); } running = false; });
+
+    // Controls display values
+    fontSize.addEventListener('input', ()=>{ fontSizeVal.textContent = fontSize.value + 'px'; ctxAscii.font = `${fontSize.value}px ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace`; if(mode==='image') renderFrame(); });
+    scale.addEventListener('input', ()=>{ scaleVal.textContent = scale.value + 'px'; if(mode==='image') renderFrame(); });
+    fps.addEventListener('input', ()=>{ fpsVal.textContent = fps.value; targetDelta = 1000/parseInt(fps.value,10); });
+    gamma.addEventListener('input', ()=>{ gammaVal.textContent = gamma.value; if(mode==='image') renderFrame(); });
+    contrast.addEventListener('input', ()=>{ contrastVal.textContent = parseFloat(contrast.value).toFixed(2)+'×'; if(mode==='image') renderFrame(); });
+    charsetSel.addEventListener('change', ()=>{ charSet = charsetSel.value; if(mode==='image') renderFrame(); });
+    kbOn.addEventListener('change', ()=>{ if(mode==='image'){ running = kbOn.checked; if(running) requestAnimationFrame(loop); }});
+    kbSpeed.addEventListener('input', ()=>{ kbSpeedVal.textContent = (kbSpeed.value/100).toFixed(2); });
+
+    // Keyboard
+    window.addEventListener('keydown', (e)=>{
+      if(e.code==='Space'){ e.preventDefault(); if(running){ if(mode==='video') video.pause(); running=false; } else { if(mode==='video') video.play(); running=true; requestAnimationFrame(loop);} }
+      if(e.key==='f'||e.key==='F'){ toggleFullscreen(); }
+      if(e.key==='['){ fontSize.value = Math.max(6, (+fontSize.value-1)); fontSize.dispatchEvent(new Event('input')); }
+      if(e.key===']'){ fontSize.value = Math.min(24, (+fontSize.value+1)); fontSize.dispatchEvent(new Event('input')); }
+      if(e.key==='{'){ scale.value = Math.max(4, (+scale.value-1)); scale.dispatchEvent(new Event('input')); }
+      if(e.key==='}'){ scale.value = Math.min(16, (+scale.value+1)); scale.dispatchEvent(new Event('input')); }
+      if(e.key==='c'||e.key==='C'){ colorOn.checked = !colorOn.checked; if(mode==='image') renderFrame(); }
+      if(e.key==='i'||e.key==='I'){ invertOn.checked = !invertOn.checked; if(mode==='image') renderFrame(); }
+    });
+
+    function toggleFullscreen(){ const el=document.documentElement; if(!document.fullscreenElement){ el.requestFullscreen?.(); } else { document.exitFullscreen?.(); } }
+
+    function loop(ts){
+      if(!running) return;
+      if(ts - lastTime < targetDelta){ return requestAnimationFrame(loop); }
+      lastTime = ts;
+      if(!hasSource) return requestAnimationFrame(loop);
+      renderFrame(ts);
+      requestAnimationFrame(loop);
+    }
+
+    function stop(){ running = false; }
+
+    function renderFrame(ts=0){
+      const w = asciiCanvas.width, h = asciiCanvas.height;
+      const cell = parseInt(scale.value,10);
+      const fsize = parseInt(fontSize.value,10);
+
+      let sourceW=640, sourceH=360;
+      if(mode==='video' && video.readyState>=2){ sourceW = video.videoWidth||sourceW; sourceH = video.videoHeight||sourceH; }
+      if(mode==='image' && imgEl.naturalWidth){ sourceW = imgEl.naturalWidth; sourceH = imgEl.naturalHeight; }
+
+      const aspect = sourceW / sourceH;
+      let dw=w, dh=Math.floor(w/aspect);
+      if(dh>h){ dh=h; dw=Math.floor(h*aspect); }
+
+      // Prepare capture canvas
+      capture.width = dw; capture.height = dh;
+
+      if(mode==='video'){
+        ctxCap.drawImage(video,0,0,dw,dh);
+      } else {
+        // Ken Burns effect (optional)
+        if(kbOn.checked){ tKB += (kbSpeed.value/1000); }
+        const zoom = 1 + 0.05*Math.sin(tKB*2*Math.PI);
+        const panX = (Math.sin(tKB*0.7)*0.5+0.5)*(sourceW - sourceW/zoom);
+        const panY = (Math.cos(tKB*0.9)*0.5+0.5)*(sourceH - sourceH/zoom);
+        const sx = panX, sy=panY, sw=sourceW/zoom, sh=sourceH/zoom;
+        ctxCap.drawImage(imgEl, sx, sy, sw, sh, 0, 0, dw, dh);
+      }
+
+      const img = ctxCap.getImageData(0,0,dw,dh);
+      const data = img.data;
+
+      // Clear ASCII canvas
+      ctxAscii.clearRect(0,0,w,h);
+      ctxAscii.fillStyle = '#000';
+      ctxAscii.fillRect(0,0,w,h);
+      const ox = Math.floor((w - dw)/2);
+      const oy = Math.floor((h - dh)/2);
+
+      ctxAscii.font = `${fsize}px ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace`;
+      ctxAscii.textBaseline = 'top';
+
+      const gammaF = parseFloat(gamma.value);
+      const contrastF = parseFloat(contrast.value);
+      const inv = invertOn.checked ? 1 : 0;
+      const chars = charSet;
+      const clen = chars.length - 1;
+
+      const yStep = cell*2;
+      const xStep = cell;
+
+      for(let y=0; y<dh; y+=yStep){
+        for(let x=0; x<dw; x+=xStep){
+          const px = ((y*dw)+x)*4;
+          let r=data[px], g=data[px+1], b=data[px+2];
+          let L = 0.2126*r + 0.7152*g + 0.0722*b; // BT.709
+          L = (((L/255 - 0.5)*contrastF)+0.5);
+          L = Math.pow(Math.max(0, Math.min(1, L)), gammaF);
+          if(inv) L = 1 - L;
+          const idx = Math.max(0, Math.min(clen, Math.round(L*clen)));
+          const ch = chars[idx];
+          if(colorOn.checked){ ctxAscii.fillStyle = `rgb(${r},${g},${b})`; }
+          else { const gval = Math.round(L*255); ctxAscii.fillStyle = `rgb(${gval},${gval},${gval})`; }
+          ctxAscii.fillText(ch, ox + x, oy + y);
+        }
+      }
+    }
+
+    // Demo: procedural canvas stream if no source yet (video mode)
+    ;(function bootstrapDemo(){
+      const demo = document.createElement('canvas');
+      const dctx = demo.getContext('2d');
+      let t=0; demo.width=320; demo.height=180;
+      function drawDemo(){
+        const {width,height}=demo;
+        dctx.fillStyle = `hsl(${(t*10)%360} 50% 6%)`; dctx.fillRect(0,0,width,height);
+        for(let i=0;i<40;i++){
+          const x=(Math.sin((t+i)*0.07+i)*0.5+0.5)*width;
+          const y=(Math.cos((t+i)*0.05+i)*0.5+0.5)*height;
+          dctx.fillStyle = `hsl(${(i*9+t*3)%360} 90% 60%)`;
+          dctx.beginPath(); dctx.arc(x,y,6+(i%5),0,Math.PI*2); dctx.fill();
+        }
+        dctx.fillStyle = '#fff'; dctx.font = '20px sans-serif'; dctx.fillText('Drop media →', 16, 28);
+        t+=1; requestAnimationFrame(drawDemo);
+      }
+      drawDemo();
+      const stream = demo.captureStream(30);
+      video.srcObject = stream; video.play();
+      setMode('video'); hasSource = true; running = true; requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+</html>

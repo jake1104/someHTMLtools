@@ -1,0 +1,2536 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>인터랙티브 주기율표</title>
+    <!-- Tailwind CSS 로드 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- jsPDF (PDF 내보내기용) 로드 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <!-- 폰트 로드 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&family=Nanum+Gothic:wght@400;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400..700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&display=swap"
+      rel="stylesheet"
+    />
+    <link
+      rel="stylesheet"
+      as="style"
+      crossorigin
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css"
+    />
+
+    <!-- 레이아웃 순서 제어를 위한 동적 스타일 태그 -->
+    <style id="layout-style-tag"></style>
+    <!-- 상온 상태 색상 제어를 위한 동적 스타일 태그 -->
+    <style id="state-style-tag"></style>
+
+    <style>
+      /* 기본 폰트 설정 */
+      body {
+        font-family: "Inter", "Noto Sans KR", sans-serif;
+      }
+
+      /* 주기율표 그리드 설정 */
+      #periodic-table {
+        display: grid;
+        grid-template-columns: repeat(18, minmax(0, 1fr));
+        grid-template-rows: repeat(10, minmax(0, 1fr));
+        gap: 4px;
+        width: 100%;
+        max-width: 1600px;
+        margin: auto;
+        font-family: "Inter", "Noto Sans KR", sans-serif;
+      }
+
+      /* 각 원소의 기본 스타일: 자유 배치를 위해 position: relative 설정 */
+      .element {
+        container-type: inline-size; /* 컨테이너 쿼리 컨텍스트 생성 */
+        aspect-ratio: 1 / 1; /* 정사각형 비율 */
+        display: block; /* Flex 대신 Block으로 설정 */
+        position: relative; /* 자식 요소의 Absolute 포지셔닝 컨테이너 */
+        padding: 4px;
+        line-height: 1.2;
+        overflow: hidden;
+        word-break: break-all;
+        text-align: center;
+        cursor: pointer; /* 편집 가능함을 나타냄 */
+        transition: transform 0.1s;
+        border-radius: 0;
+      }
+
+      .element:hover {
+        z-index: 100;
+        transform: scale(1.03); /* 호버 시 약간 확대 */
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      }
+
+      /* 모든 레이아웃 항목은 absolute position */
+      .element > div[data-layout-key] {
+        position: absolute;
+        /* transform을 사용하여 top/left가 요소의 중심이 되도록 설정 */
+        transform: translate(-50%, -50%);
+        transition: all 0.1s ease-out; /* 부드러운 움직임 */
+        z-index: 10;
+        /* 긴 텍스트 줄바꿈 방지 */
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+      }
+
+      /* 원소 기호 스타일 */
+      .symbol {
+        font-weight: 700;
+      }
+
+      /* 원자 번호 */
+      .atomic-number {
+        font-weight: 500;
+        /* 초기 색상은 JS에서 CSS 변수로 정의됨 */
+      }
+
+
+
+      /* 상온 상태 마커 색상은 JS에서 동적으로 CSS 변수로 제어됩니다. */
+      .state-gas {
+        color: var(--color-state-gas);
+      }
+      .state-liquid {
+        color: var(--color-state-liquid);
+      }
+      .state-solid {
+        color: var(--color-state-solid);
+      }
+      .state-unknown {
+        color: var(--color-state-unknown);
+      }
+
+      /* CSS 변수를 사용한 카테고리별 색상 정의 (기본값) */
+      :root {
+        /* 카테고리 색상 기본값 */
+        --color-alkali-metal: #fca5a5;
+        --color-alkaline-earth-metal: #fdba74;
+        --color-lanthanide: #fde047;
+        --color-actinide: #bef264;
+        --color-transition-metal: #6ee7b7;
+        --color-post-transition-metal: #7dd3fc;
+        --color-metalloid: #a5b4fc;
+        --color-nonmetal: #c4b5fd;
+        --color-halogen: #f0abfc;
+        --color-noble-gas: #f9a8d4;
+        --color-unknown: #d1d5db;
+
+        /* 상온 상태 색상 기본값 */
+        --color-state-gas: #e11d48; /* Red */
+        --color-state-liquid: #2563eb; /* Blue */
+        --color-state-solid: #1f2937; /* Dark Gray */
+        --color-state-unknown: #6b7280; /* Medium Gray */
+      }
+
+      /* 카테고리별 배경색 적용 */
+      .element[data-category="alkali-metal"] {
+        background-color: var(--color-alkali-metal);
+      }
+      .element[data-category="alkaline-earth-metal"] {
+        background-color: var(--color-alkaline-earth-metal);
+      }
+      .element[data-category="lanthanide"] {
+        background-color: var(--color-lanthanide);
+      }
+      .element[data-category="actinide"] {
+        background-color: var(--color-actinide);
+      }
+      .element[data-category="transition-metal"] {
+        background-color: var(--color-transition-metal);
+      }
+      .element[data-category="post-transition-metal"] {
+        background-color: var(--color-post-transition-metal);
+      }
+      .element[data-category="metalloid"] {
+        background-color: var(--color-metalloid);
+      }
+      .element[data-category="nonmetal"] {
+        background-color: var(--color-nonmetal);
+      }
+      .element[data-category="halogen"] {
+        background-color: var(--color-halogen);
+      }
+      .element[data-category="noble-gas"] {
+        background-color: var(--color-noble-gas);
+      }
+      .element[data-category="unknown"] {
+        background-color: var(--color-unknown);
+      }
+
+      /* 토글 기능용 CSS 클래스 */
+      .hide-categories .element {
+        background-color: #f3f4f6; /* gray-100 */
+        border-color: #d1d5db; /* gray-300 */
+      }
+
+
+      /* 레이아웃 편집기 전용 스타일 */
+      #layout-preview {
+        border: 2px dashed #93c5fd;
+        box-shadow: 0 0 10px rgba(147, 197, 253, 0.5);
+      }
+      #layout-preview > div[data-layout-key] {
+        cursor: move;
+        user-select: none;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        background-color: rgba(255, 255, 255, 0.7);
+        padding: 1px 3px;
+        border-radius: 4px;
+      }
+      #layout-preview > div[data-layout-key].selected {
+        outline: 2px solid #3b82f6; /* blue-500 */
+        box-shadow: 0 0 8px rgba(59, 130, 246, 0.5);
+        z-index: 15; /* 다른 요소 위에 보이도록 */
+      }
+
+      /* 스냅 라인 스타일 */
+      .snap-line {
+        position: absolute;
+        background-color: #ef4444; /* red-500 */
+        display: none; /* 기본적으로 숨김 */
+        z-index: 25; /* 최상단에 표시 */
+      }
+      .snap-line-v {
+        width: 1px;
+        height: 100%;
+        top: 0;
+        left: 50%;
+      }
+      .snap-line-h {
+        width: 100%;
+        height: 1px;
+        left: 0;
+        top: 50%;
+      }
+
+      /* 폰트 크기 조절을 위한 슬라이더 스타일 */
+      input[type="range"] {
+        -webkit-appearance: none;
+        width: 100%;
+        height: 4px;
+        background: #d1d5db;
+        border-radius: 2px;
+        margin: 0;
+        padding: 0;
+      }
+      input[type="range"]::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 12px;
+        height: 12px;
+        background: #3b82f6;
+        border-radius: 50%;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-50 text-gray-900 p-4 md:p-8">
+    <div class="container mx-auto">
+      <h1 class="text-3xl font-bold text-center mb-8">인터랙티브 주기율표</h1>
+      <p class="text-center text-sm text-gray-600 mb-6">
+        원소 블록을 클릭하여 상온 상태(STP) 및 주기율표 위치를 직접 변경할 수
+        있습니다.
+      </p>
+
+      <!-- 제어판 -->
+      <div id="controls" class="bg-white p-6 rounded-lg shadow-md mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+
+
+          <!-- 2. 레이아웃 편집기 섹션 -->
+          <div class="md:col-span-2">
+            <h3 class="text-lg font-semibold mb-3 border-b pb-2">
+              원소 블록 내부 레이아웃 편집
+            </h3>
+            <p class="text-xs text-gray-500 mb-3">
+              수소(H) 항목들을 **직접 드래그하여** 위치를 변경하세요. 항목을
+              **클릭하면** 폰트 크기를 조절할 수 있습니다.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- 예시 원소 블록 (레이아웃 미리보기) -->
+              <div
+                id="layout-preview"
+                class="element p-1 border border-gray-300 shadow-sm text-center aspect-square"
+                style="background-color: var(--color-nonmetal)"
+              >
+                <!-- 스냅 라인 (기본 숨김) -->
+                <div id="snap-line-v" class="snap-line snap-line-v"></div>
+                <div id="snap-line-h" class="snap-line snap-line-h"></div>
+                <!-- 내부 항목들은 JS에서 생성됨 -->
+              </div>
+
+              <!-- 레이아웃 항목 편집기 -->
+              <div
+                id="layout-controls"
+                class="flex flex-col p-3 bg-gray-100 rounded-lg"
+              >
+                <!-- JS가 여기에 편집 UI를 동적으로 생성합니다. -->
+              </div>
+               <!-- 숨겨진 항목 컨트롤러 -->
+              <div id="hidden-items-controls" class="mt-4 p-3 bg-gray-100 rounded-lg">
+                <!-- JS가 여기에 숨겨진 항목 UI를 동적으로 생성합니다. -->
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. 색상/상태 디자인 섹션 -->
+          <div>
+            <h3 class="text-lg font-semibold mb-3 border-b pb-2">
+              색상 및 마커 디자인
+            </h3>
+
+            <!-- 3-1. 상온 상태 디자인 섹션 -->
+            <div class="mb-4">
+              <h4 class="text-sm font-medium mb-2">
+                상온 상태 마커 디자인 (G, L, S, ?)
+              </h4>
+              <div
+                id="state-style-controls"
+                class="grid grid-cols-2 gap-3 text-sm p-3 bg-gray-100 rounded-lg"
+              >
+                <!-- 상태 마커 컨트롤이 여기에 동적으로 삽입됩니다. -->
+              </div>
+            </div>
+
+            <!-- 3-2. 계열 색상 변경 섹션 -->
+            <div class="pt-4 border-t border-gray-200">
+              <h4 class="text-sm font-medium mb-2">계열 배경 색상 변경</h4>
+              <div class="flex items-center mb-4">
+                <input type="checkbox" id="toggle-categories" class="rounded mr-2" checked>
+                <label for="toggle-categories" class="text-sm text-gray-700">계열 색상 사용</label>
+              </div>
+              <div id="color-controls" class="grid grid-cols-2 gap-2 text-sm">
+                <!-- 색상 피커가 동적으로 여기에 삽입됩니다. -->
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. 도구 섹션 -->
+          <div class="lg:col-span-1">
+            <h3 class="text-lg font-semibold mb-3 border-b pb-2">도구</h3>
+            <div class="flex space-x-2 mb-2">
+              <select id="export-format-select" class="flex-grow p-2 border border-gray-300 rounded-lg">
+                <option value="png">PNG 이미지 (*.png)</option>
+                <option value="jpeg">JPG 이미지 (*.jpeg)</option>
+                <option value="pdf">PDF 문서 (*.pdf)</option>
+              </select>
+              <button
+                id="export-btn"
+                class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-200"
+              >
+                내보내기
+              </button>
+            </div>
+            <p class="text-xs text-gray-500 mt-2">
+              현재 설정된 모습 그대로 주기율표를 이미지 또는 PDF 파일로 저장합니다.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 주기율표 컨테이너 (가로 스크롤) -->
+      <div
+        id="periodic-table-wrapper"
+        class="overflow-x-auto bg-white p-4 rounded-lg shadow-inner"
+      >
+        <div id="periodic-table">
+          <!-- 원소들이 여기에 동적으로 생성됩니다. -->
+        </div>
+      </div>
+    </div>
+
+    <script>
+      // 원소 데이터
+      const elements = [
+        {
+          number: 1,
+          symbol: "H",
+          name_en: "Hydrogen",
+          name_kr: "수소",
+          atomic_weight: "1.008",
+          category: "nonmetal",
+          state_at_stp: "gas",
+          row: 1,
+          col: 1,
+        },
+        // 2주기
+        {
+          number: 2,
+          symbol: "He",
+          name_en: "Helium",
+          name_kr: "헬륨",
+          atomic_weight: "4.0026",
+          category: "noble-gas",
+          state_at_stp: "gas",
+          row: 1,
+          col: 18,
+        },
+        {
+          number: 3,
+          symbol: "Li",
+          name_en: "Lithium",
+          name_kr: "리튬",
+          atomic_weight: "6.94",
+          category: "alkali-metal",
+          state_at_stp: "solid",
+          row: 2,
+          col: 1,
+        },
+        {
+          number: 4,
+          symbol: "Be",
+          name_en: "Beryllium",
+          name_kr: "베릴륨",
+          atomic_weight: "9.0122",
+          category: "alkaline-earth-metal",
+          state_at_stp: "solid",
+          row: 2,
+          col: 2,
+        },
+        {
+          number: 5,
+          symbol: "B",
+          name_en: "Boron",
+          name_kr: "붕소",
+          atomic_weight: "10.81",
+          category: "metalloid",
+          state_at_stp: "solid",
+          row: 2,
+          col: 13,
+        },
+        {
+          number: 6,
+          symbol: "C",
+          name_en: "Carbon",
+          name_kr: "탄소",
+          atomic_weight: "12.011",
+          category: "nonmetal",
+          state_at_stp: "solid",
+          row: 2,
+          col: 14,
+        },
+        {
+          number: 7,
+          symbol: "N",
+          name_en: "Nitrogen",
+          name_kr: "질소",
+          atomic_weight: "14.007",
+          category: "nonmetal",
+          state_at_stp: "gas",
+          row: 2,
+          col: 15,
+        },
+        {
+          number: 8,
+          symbol: "O",
+          name_en: "Oxygen",
+          name_kr: "산소",
+          atomic_weight: "15.999",
+          category: "nonmetal",
+          state_at_stp: "gas",
+          row: 2,
+          col: 16,
+        },
+        {
+          number: 9,
+          symbol: "F",
+          name_en: "Fluorine",
+          name_kr: "플루오린",
+          atomic_weight: "18.998",
+          category: "halogen",
+          state_at_stp: "gas",
+          row: 2,
+          col: 17,
+        },
+        {
+          number: 10,
+          symbol: "Ne",
+          name_en: "Neon",
+          name_kr: "네온",
+          atomic_weight: "20.180",
+          category: "noble-gas",
+          state_at_stp: "gas",
+          row: 2,
+          col: 18,
+        },
+        // 3주기
+        {
+          number: 11,
+          symbol: "Na",
+          name_en: "Sodium",
+          name_kr: "나트륨",
+          atomic_weight: "22.990",
+          category: "alkali-metal",
+          state_at_stp: "solid",
+          row: 3,
+          col: 1,
+        },
+        {
+          number: 12,
+          symbol: "Mg",
+          name_en: "Magnesium",
+          name_kr: "마그네슘",
+          atomic_weight: "24.305",
+          category: "alkaline-earth-metal",
+          state_at_stp: "solid",
+          row: 3,
+          col: 2,
+        },
+        {
+          number: 13,
+          symbol: "Al",
+          name_en: "Aluminum",
+          name_kr: "알루미늄",
+          atomic_weight: "26.982",
+          category: "post-transition-metal",
+          state_at_stp: "solid",
+          row: 3,
+          col: 13,
+        },
+        {
+          number: 14,
+          symbol: "Si",
+          name_en: "Silicon",
+          name_kr: "규소",
+          atomic_weight: "28.085",
+          category: "metalloid",
+          state_at_stp: "solid",
+          row: 3,
+          col: 14,
+        },
+        {
+          number: 15,
+          symbol: "P",
+          name_en: "Phosphorus",
+          name_kr: "인",
+          atomic_weight: "30.974",
+          category: "nonmetal",
+          state_at_stp: "solid",
+          row: 3,
+          col: 15,
+        },
+        {
+          number: 16,
+          symbol: "S",
+          name_en: "Sulfur",
+          name_kr: "황",
+          atomic_weight: "32.06",
+          category: "nonmetal",
+          state_at_stp: "solid",
+          row: 3,
+          col: 16,
+        },
+        {
+          number: 17,
+          symbol: "Cl",
+          name_en: "Chlorine",
+          name_kr: "염소",
+          atomic_weight: "35.45",
+          category: "halogen",
+          state_at_stp: "gas",
+          row: 3,
+          col: 17,
+        },
+        {
+          number: 18,
+          symbol: "Ar",
+          name_en: "Argon",
+          name_kr: "아르곤",
+          atomic_weight: "39.948",
+          category: "noble-gas",
+          state_at_stp: "gas",
+          row: 3,
+          col: 18,
+        },
+        // 4주기
+        {
+          number: 19,
+          symbol: "K",
+          name_en: "Potassium",
+          name_kr: "칼륨",
+          atomic_weight: "39.098",
+          category: "alkali-metal",
+          state_at_stp: "solid",
+          row: 4,
+          col: 1,
+        },
+        {
+          number: 20,
+          symbol: "Ca",
+          name_en: "Calcium",
+          name_kr: "칼슘",
+          atomic_weight: "40.078",
+          category: "alkaline-earth-metal",
+          state_at_stp: "solid",
+          row: 4,
+          col: 2,
+        },
+        {
+          number: 21,
+          symbol: "Sc",
+          name_en: "Scandium",
+          name_kr: "스칸듐",
+          atomic_weight: "44.956",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 4,
+          col: 3,
+        },
+        {
+          number: 22,
+          symbol: "Ti",
+          name_en: "Titanium",
+          name_kr: "타이타늄",
+          atomic_weight: "47.867",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 4,
+          col: 4,
+        },
+        {
+          number: 23,
+          symbol: "V",
+          name_en: "Vanadium",
+          name_kr: "바나듐",
+          atomic_weight: "50.942",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 4,
+          col: 5,
+        },
+        {
+          number: 24,
+          symbol: "Cr",
+          name_en: "Chromium",
+          name_kr: "크로뮴",
+          atomic_weight: "51.996",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 4,
+          col: 6,
+        },
+        {
+          number: 25,
+          symbol: "Mn",
+          name_en: "Manganese",
+          name_kr: "망가니즈",
+          atomic_weight: "54.938",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 4,
+          col: 7,
+        },
+        {
+          number: 26,
+          symbol: "Fe",
+          name_en: "Iron",
+          name_kr: "철",
+          atomic_weight: "55.845",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 4,
+          col: 8,
+        },
+        {
+          number: 27,
+          symbol: "Co",
+          name_en: "Cobalt",
+          name_kr: "코발트",
+          atomic_weight: "58.933",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 4,
+          col: 9,
+        },
+        {
+          number: 28,
+          symbol: "Ni",
+          name_en: "Nickel",
+          name_kr: "니켈",
+          atomic_weight: "58.693",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 4,
+          col: 10,
+        },
+        {
+          number: 29,
+          symbol: "Cu",
+          name_en: "Copper",
+          name_kr: "구리",
+          atomic_weight: "63.546",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 4,
+          col: 11,
+        },
+        {
+          number: 30,
+          symbol: "Zn",
+          name_en: "Zinc",
+          name_kr: "아연",
+          atomic_weight: "65.38",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 4,
+          col: 12,
+        },
+        {
+          number: 31,
+          symbol: "Ga",
+          name_en: "Gallium",
+          name_kr: "갈륨",
+          atomic_weight: "69.723",
+          category: "post-transition-metal",
+          state_at_stp: "solid",
+          row: 4,
+          col: 13,
+        },
+        {
+          number: 32,
+          symbol: "Ge",
+          name_en: "Germanium",
+          name_kr: "저마늄",
+          atomic_weight: "72.630",
+          category: "metalloid",
+          state_at_stp: "solid",
+          row: 4,
+          col: 14,
+        },
+        {
+          number: 33,
+          symbol: "As",
+          name_en: "Arsenic",
+          name_kr: "비소",
+          atomic_weight: "74.922",
+          category: "metalloid",
+          state_at_stp: "solid",
+          row: 4,
+          col: 15,
+        },
+        {
+          number: 34,
+          symbol: "Se",
+          name_en: "Selenium",
+          name_kr: "셀레늄",
+          atomic_weight: "78.971",
+          category: "nonmetal",
+          state_at_stp: "solid",
+          row: 4,
+          col: 16,
+        },
+        {
+          number: 35,
+          symbol: "Br",
+          name_en: "Bromine",
+          name_kr: "브로민",
+          atomic_weight: "79.904",
+          category: "halogen",
+          state_at_stp: "liquid",
+          row: 4,
+          col: 17,
+        },
+        {
+          number: 36,
+          symbol: "Kr",
+          name_en: "Krypton",
+          name_kr: "크립톤",
+          atomic_weight: "83.798",
+          category: "noble-gas",
+          state_at_stp: "gas",
+          row: 4,
+          col: 18,
+        },
+        // 5주기
+        {
+          number: 37,
+          symbol: "Rb",
+          name_en: "Rubidium",
+          name_kr: "루비듐",
+          atomic_weight: "85.468",
+          category: "alkali-metal",
+          state_at_stp: "solid",
+          row: 5,
+          col: 1,
+        },
+        {
+          number: 38,
+          symbol: "Sr",
+          name_en: "Strontium",
+          name_kr: "스트론튬",
+          atomic_weight: "87.62",
+          category: "alkaline-earth-metal",
+          state_at_stp: "solid",
+          row: 5,
+          col: 2,
+        },
+        {
+          number: 39,
+          symbol: "Y",
+          name_en: "Yttrium",
+          name_kr: "이트륨",
+          atomic_weight: "88.906",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 5,
+          col: 3,
+        },
+        {
+          number: 40,
+          symbol: "Zr",
+          name_en: "Zirconium",
+          name_kr: "지르코늄",
+          atomic_weight: "91.224",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 5,
+          col: 4,
+        },
+        {
+          number: 41,
+          symbol: "Nb",
+          name_en: "Niobium",
+          name_kr: "나이오븀",
+          atomic_weight: "92.906",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 5,
+          col: 5,
+        },
+        {
+          number: 42,
+          symbol: "Mo",
+          name_en: "Molybdenum",
+          name_kr: "몰리브데넘",
+          atomic_weight: "95.96",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 5,
+          col: 6,
+        },
+        {
+          number: 43,
+          symbol: "Tc",
+          name_en: "Technetium",
+          name_kr: "테크네튬",
+          atomic_weight: "(98)",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 5,
+          col: 7,
+        },
+        {
+          number: 44,
+          symbol: "Ru",
+          name_en: "Ruthenium",
+          name_kr: "루테늄",
+          atomic_weight: "101.07",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 5,
+          col: 8,
+        },
+        {
+          number: 45,
+          symbol: "Rh",
+          name_en: "Rhodium",
+          name_kr: "로듐",
+          atomic_weight: "102.91",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 5,
+          col: 9,
+        },
+        {
+          number: 46,
+          symbol: "Pd",
+          name_en: "Palladium",
+          name_kr: "팔라듐",
+          atomic_weight: "106.42",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 5,
+          col: 10,
+        },
+        {
+          number: 47,
+          symbol: "Ag",
+          name_en: "Silver",
+          name_kr: "은",
+          atomic_weight: "107.87",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 5,
+          col: 11,
+        },
+        {
+          number: 48,
+          symbol: "Cd",
+          name_en: "Cadmium",
+          name_kr: "카드뮴",
+          atomic_weight: "112.41",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 5,
+          col: 12,
+        },
+        {
+          number: 49,
+          symbol: "In",
+          name_en: "Indium",
+          name_kr: "인듐",
+          atomic_weight: "114.82",
+          category: "post-transition-metal",
+          state_at_stp: "solid",
+          row: 5,
+          col: 13,
+        },
+        {
+          number: 50,
+          symbol: "Sn",
+          name_en: "Tin",
+          name_kr: "주석",
+          atomic_weight: "118.71",
+          category: "post-transition-metal",
+          state_at_stp: "solid",
+          row: 5,
+          col: 14,
+        },
+        {
+          number: 51,
+          symbol: "Sb",
+          name_en: "Antimony",
+          name_kr: "안티모니",
+          atomic_weight: "121.76",
+          category: "metalloid",
+          state_at_stp: "solid",
+          row: 5,
+          col: 15,
+        },
+        {
+          number: 52,
+          symbol: "Te",
+          name_en: "Tellurium",
+          name_kr: "텔루륨",
+          atomic_weight: "127.60",
+          category: "metalloid",
+          state_at_stp: "solid",
+          row: 5,
+          col: 16,
+        },
+        {
+          number: 53,
+          symbol: "I",
+          name_en: "Iodine",
+          name_kr: "아이오딘",
+          atomic_weight: "126.90",
+          category: "halogen",
+          state_at_stp: "solid",
+          row: 5,
+          col: 17,
+        },
+        {
+          number: 54,
+          symbol: "Xe",
+          name_en: "Xenon",
+          name_kr: "제논",
+          atomic_weight: "131.29",
+          category: "noble-gas",
+          state_at_stp: "gas",
+          row: 5,
+          col: 18,
+        },
+        // 6주기
+        {
+          number: 55,
+          symbol: "Cs",
+          name_en: "Caesium",
+          name_kr: "세슘",
+          atomic_weight: "132.91",
+          category: "alkali-metal",
+          state_at_stp: "solid",
+          row: 6,
+          col: 1,
+        },
+        {
+          number: 56,
+          symbol: "Ba",
+          name_en: "Barium",
+          name_kr: "바륨",
+          atomic_weight: "137.33",
+          category: "alkaline-earth-metal",
+          state_at_stp: "solid",
+          row: 6,
+          col: 2,
+        },
+        // 57-71: 란타넘족 (행 9에 표시)
+        {
+          number: 57,
+          symbol: "La",
+          name_en: "Lanthanum",
+          name_kr: "란타넘",
+          atomic_weight: "138.91",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 3,
+        },
+        {
+          number: 58,
+          symbol: "Ce",
+          name_en: "Cerium",
+          name_kr: "세륨",
+          atomic_weight: "140.12",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 4,
+        },
+        {
+          number: 59,
+          symbol: "Pr",
+          name_en: "Praseodymium",
+          name_kr: "프라세오디뮴",
+          atomic_weight: "140.91",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 5,
+        },
+        {
+          number: 60,
+          symbol: "Nd",
+          name_en: "Neodymium",
+          name_kr: "네오디뮴",
+          atomic_weight: "144.24",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 6,
+        },
+        {
+          number: 61,
+          symbol: "Pm",
+          name_en: "Promethium",
+          name_kr: "프로메튬",
+          atomic_weight: "(145)",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 7,
+        },
+        {
+          number: 62,
+          symbol: "Sm",
+          name_en: "Samarium",
+          name_kr: "사마륨",
+          atomic_weight: "150.36",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 8,
+        },
+        {
+          number: 63,
+          symbol: "Eu",
+          name_en: "Europium",
+          name_kr: "유로퓸",
+          atomic_weight: "151.96",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 9,
+        },
+        {
+          number: 64,
+          symbol: "Gd",
+          name_en: "Gadolinium",
+          name_kr: "가돌리늄",
+          atomic_weight: "157.25",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 10,
+        },
+        {
+          number: 65,
+          symbol: "Tb",
+          name_en: "Terbium",
+          name_kr: "터븀",
+          atomic_weight: "158.93",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 11,
+        },
+        {
+          number: 66,
+          symbol: "Dy",
+          name_en: "Dysprosium",
+          name_kr: "디스프로슘",
+          atomic_weight: "162.50",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 12,
+        },
+        {
+          number: 67,
+          symbol: "Ho",
+          name_en: "Holmium",
+          name_kr: "홀뮴",
+          atomic_weight: "164.93",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 13,
+        },
+        {
+          number: 68,
+          symbol: "Er",
+          name_en: "Erbium",
+          name_kr: "어븀",
+          atomic_weight: "167.26",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 14,
+        },
+        {
+          number: 69,
+          symbol: "Tm",
+          name_en: "Thulium",
+          name_kr: "툴륨",
+          atomic_weight: "168.93",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 15,
+        },
+        {
+          number: 70,
+          symbol: "Yb",
+          name_en: "Ytterbium",
+          name_kr: "이터븀",
+          atomic_weight: "173.05",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 16,
+        },
+        {
+          number: 71,
+          symbol: "Lu",
+          name_en: "Lutetium",
+          name_kr: "루테튬",
+          atomic_weight: "174.97",
+          category: "lanthanide",
+          state_at_stp: "solid",
+          row: 9,
+          col: 17,
+        },
+
+        {
+          number: 72,
+          symbol: "Hf",
+          name_en: "Hafnium",
+          name_kr: "하프늄",
+          atomic_weight: "178.49",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 6,
+          col: 4,
+        },
+        {
+          number: 73,
+          symbol: "Ta",
+          name_en: "Tantalum",
+          name_kr: "탄탈럼",
+          atomic_weight: "180.95",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 6,
+          col: 5,
+        },
+        {
+          number: 74,
+          symbol: "W",
+          name_en: "Tungsten",
+          name_kr: "텅스텐",
+          atomic_weight: "183.84",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 6,
+          col: 6,
+        },
+        {
+          number: 75,
+          symbol: "Re",
+          name_en: "Rhenium",
+          name_kr: "레늄",
+          atomic_weight: "186.21",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 6,
+          col: 7,
+        },
+        {
+          number: 76,
+          symbol: "Os",
+          name_en: "Osmium",
+          name_kr: "오스뮴",
+          atomic_weight: "190.23",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 6,
+          col: 8,
+        },
+        {
+          number: 77,
+          symbol: "Ir",
+          name_en: "Iridium",
+          name_kr: "이리듐",
+          atomic_weight: "192.22",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 6,
+          col: 9,
+        },
+        {
+          number: 78,
+          symbol: "Pt",
+          name_en: "Platinum",
+          name_kr: "백금",
+          atomic_weight: "195.08",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 6,
+          col: 10,
+        },
+        {
+          number: 79,
+          symbol: "Au",
+          name_en: "Gold",
+          name_kr: "금",
+          atomic_weight: "196.97",
+          category: "transition-metal",
+          state_at_stp: "solid",
+          row: 6,
+          col: 11,
+        },
+        {
+          number: 80,
+          symbol: "Hg",
+          name_en: "Mercury",
+          name_kr: "수은",
+          atomic_weight: "200.59",
+          category: "transition-metal",
+          state_at_stp: "liquid",
+          row: 6,
+          col: 12,
+        },
+        {
+          number: 81,
+          symbol: "Tl",
+          name_en: "Thallium",
+          name_kr: "탈륨",
+          atomic_weight: "204.38",
+          category: "post-transition-metal",
+          state_at_stp: "solid",
+          row: 6,
+          col: 13,
+        },
+        {
+          number: 82,
+          symbol: "Pb",
+          name_en: "Lead",
+          name_kr: "납",
+          atomic_weight: "207.2",
+          category: "post-transition-metal",
+          state_at_stp: "solid",
+          row: 6,
+          col: 14,
+        },
+        {
+          number: 83,
+          symbol: "Bi",
+          name_en: "Bismuth",
+          name_kr: "비스무트",
+          atomic_weight: "208.98",
+          category: "post-transition-metal",
+          state_at_stp: "solid",
+          row: 6,
+          col: 15,
+        },
+        {
+          number: 84,
+          symbol: "Po",
+          name_en: "Polonium",
+          name_kr: "폴로늄",
+          atomic_weight: "(209)",
+          category: "post-transition-metal",
+          state_at_stp: "solid",
+          row: 6,
+          col: 16,
+        },
+        {
+          number: 85,
+          symbol: "At",
+          name_en: "Astatine",
+          name_kr: "아스타틴",
+          atomic_weight: "(210)",
+          category: "metalloid",
+          state_at_stp: "solid",
+          row: 6,
+          col: 17,
+        },
+        {
+          number: 86,
+          symbol: "Rn",
+          name_en: "Radon",
+          name_kr: "라돈",
+          atomic_weight: "(222)",
+          category: "noble-gas",
+          state_at_stp: "gas",
+          row: 6,
+          col: 18,
+        },
+        // 7주기
+        {
+          number: 87,
+          symbol: "Fr",
+          name_en: "Francium",
+          name_kr: "프랑슘",
+          atomic_weight: "(223)",
+          category: "alkali-metal",
+          state_at_stp: "solid",
+          row: 7,
+          col: 1,
+        },
+        {
+          number: 88,
+          symbol: "Ra",
+          name_en: "Radium",
+          name_kr: "라듐",
+          atomic_weight: "(226)",
+          category: "alkaline-earth-metal",
+          state_at_stp: "solid",
+          row: 7,
+          col: 2,
+        },
+        // 89-103: 악티늄족 (행 10에 표시)
+        {
+          number: 89,
+          symbol: "Ac",
+          name_en: "Actinium",
+          name_kr: "악티늄",
+          atomic_weight: "(227)",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 3,
+        },
+        {
+          number: 90,
+          symbol: "Th",
+          name_en: "Thorium",
+          name_kr: "토륨",
+          atomic_weight: "232.04",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 4,
+        },
+        {
+          number: 91,
+          symbol: "Pa",
+          name_en: "Protactinium",
+          name_kr: "프로트악티늄",
+          atomic_weight: "231.04",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 5,
+        },
+        {
+          number: 92,
+          symbol: "U",
+          name_en: "Uranium",
+          name_kr: "우라늄",
+          atomic_weight: "238.03",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 6,
+        },
+        {
+          number: 93,
+          symbol: "Np",
+          name_en: "Neptunium",
+          name_kr: "넵투늄",
+          atomic_weight: "(237)",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 7,
+        },
+        {
+          number: 94,
+          symbol: "Pu",
+          name_en: "Plutonium",
+          name_kr: "플루토늄",
+          atomic_weight: "(244)",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 8,
+        },
+        {
+          number: 95,
+          symbol: "Am",
+          name_en: "Americium",
+          name_kr: "아메리슘",
+          atomic_weight: "(243)",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 9,
+        },
+        {
+          number: 96,
+          symbol: "Cm",
+          name_en: "Curium",
+          name_kr: "퀴륨",
+          atomic_weight: "(247)",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 10,
+        },
+        {
+          number: 97,
+          symbol: "Bk",
+          name_en: "Berkelium",
+          name_kr: "버클륨",
+          atomic_weight: "(247)",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 11,
+        },
+        {
+          number: 98,
+          symbol: "Cf",
+          name_en: "Californium",
+          name_kr: "칼리포늄",
+          atomic_weight: "(251)",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 12,
+        },
+        {
+          number: 99,
+          symbol: "Es",
+          name_en: "Einsteinium",
+          name_kr: "아인슈타이늄",
+          atomic_weight: "(252)",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 13,
+        },
+        {
+          number: 100,
+          symbol: "Fm",
+          name_en: "Fermium",
+          name_kr: "페르뮴",
+          atomic_weight: "(257)",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 14,
+        },
+        {
+          number: 101,
+          symbol: "Md",
+          name_en: "Mendelevium",
+          name_kr: "멘델레븀",
+          atomic_weight: "(258)",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 15,
+        },
+        {
+          number: 102,
+          symbol: "No",
+          name_en: "Nobelium",
+          name_kr: "노벨륨",
+          atomic_weight: "(259)",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 16,
+        },
+        {
+          number: 103,
+          symbol: "Lr",
+          name_en: "Lawrencium",
+          name_kr: "로렌슘",
+          atomic_weight: "(262)",
+          category: "actinide",
+          state_at_stp: "solid",
+          row: 10,
+          col: 17,
+        },
+
+        {
+          number: 104,
+          symbol: "Rf",
+          name_en: "Rutherfordium",
+          name_kr: "러더포듐",
+          atomic_weight: "(267)",
+          category: "transition-metal",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 4,
+        },
+        {
+          number: 105,
+          symbol: "Db",
+          name_en: "Dubnium",
+          name_kr: "더브늄",
+          atomic_weight: "(270)",
+          category: "transition-metal",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 5,
+        },
+        {
+          number: 106,
+          symbol: "Sg",
+          name_en: "Seaborgium",
+          name_kr: "시보귬",
+          atomic_weight: "(271)",
+          category: "transition-metal",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 6,
+        },
+        {
+          number: 107,
+          symbol: "Bh",
+          name_en: "Bohrium",
+          name_kr: "보륨",
+          atomic_weight: "(270)",
+          category: "transition-metal",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 7,
+        },
+        {
+          number: 108,
+          symbol: "Hs",
+          name_en: "Hassium",
+          name_kr: "하슘",
+          atomic_weight: "(277)",
+          category: "transition-metal",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 8,
+        },
+        {
+          number: 109,
+          symbol: "Mt",
+          name_en: "Meitnerium",
+          name_kr: "마이트너륨",
+          atomic_weight: "(278)",
+          category: "unknown",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 9,
+        },
+        {
+          number: 110,
+          symbol: "Ds",
+          name_en: "Darmstadtium",
+          name_kr: "다름슈타튬",
+          atomic_weight: "(281)",
+          category: "unknown",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 10,
+        },
+        {
+          number: 111,
+          symbol: "Rg",
+          name_en: "Roentgenium",
+          name_kr: "뢴트게늄",
+          atomic_weight: "(282)",
+          category: "unknown",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 11,
+        },
+        {
+          number: 112,
+          symbol: "Cn",
+          name_en: "Copernicium",
+          name_kr: "코페르니슘",
+          atomic_weight: "(285)",
+          category: "transition-metal",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 12,
+        },
+        {
+          number: 113,
+          symbol: "Nh",
+          name_en: "Nihonium",
+          name_kr: "니호늄",
+          atomic_weight: "(286)",
+          category: "unknown",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 13,
+        },
+        {
+          number: 114,
+          symbol: "Fl",
+          name_en: "Flerovium",
+          name_kr: "플레로븀",
+          atomic_weight: "(289)",
+          category: "post-transition-metal",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 14,
+        },
+        {
+          number: 115,
+          symbol: "Mc",
+          name_en: "Moscovium",
+          name_kr: "모스코븀",
+          atomic_weight: "(290)",
+          category: "unknown",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 15,
+        },
+        {
+          number: 116,
+          symbol: "Lv",
+          name_en: "Livermorium",
+          name_kr: "리버모륨",
+          atomic_weight: "(293)",
+          category: "unknown",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 16,
+        },
+        {
+          number: 117,
+          symbol: "Ts",
+          name_en: "Tennessine",
+          name_kr: "테네신",
+          atomic_weight: "(294)",
+          category: "halogen",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 17,
+        },
+        {
+          number: 118,
+          symbol: "Og",
+          name_en: "Oganesson",
+          name_kr: "오가네손",
+          atomic_weight: "(294)",
+          category: "noble-gas",
+          state_at_stp: "unknown",
+          row: 7,
+          col: 18,
+        },
+      ];
+
+      // 원소 계열 정보 (색상 커스터마이징용)
+      const categories = {
+        "alkali-metal": { name_kr: "알칼리 금속", defaultColor: "#fca5a5" },
+        "alkaline-earth-metal": {
+          name_kr: "알칼리 토금속",
+          defaultColor: "#fdba74",
+        },
+        lanthanide: { name_kr: "란타넘족", defaultColor: "#fde047" },
+        actinide: { name_kr: "악티늄족", defaultColor: "#bef264" },
+        "transition-metal": { name_kr: "전이 금속", defaultColor: "#6ee7b7" },
+        "post-transition-metal": {
+          name_kr: "전이후 금속",
+          defaultColor: "#7dd3fc",
+        },
+        metalloid: { name_kr: "준금속", defaultColor: "#a5b4fc" },
+        nonmetal: { name_kr: "비금속 (수소 포함)", defaultColor: "#c4b5fd" },
+        halogen: { name_kr: "할로젠", defaultColor: "#f0abfc" },
+        "noble-gas": { name_kr: "비활성 기체", defaultColor: "#f9a8d4" },
+        unknown: { name_kr: "미분류", defaultColor: "#d1d5db" },
+      };
+
+      // 상온 상태 타입 정보 및 기본값
+      const stateTypes = {
+        gas: { name_kr: "기체", defaultSymbol: "G", defaultColor: "#e11d48" },
+        liquid: {
+          name_kr: "액체",
+          defaultSymbol: "L",
+          defaultColor: "#2563eb",
+        },
+        solid: { name_kr: "고체", defaultSymbol: "S", defaultColor: "#1f2937" },
+        unknown: {
+          name_kr: "미정/인공",
+          defaultSymbol: "?",
+          defaultColor: "#6b7280",
+        },
+      };
+
+      // 상온 상태 심볼 및 색상 현재 상태 (JS와 CSS 변수 동기화)
+      let currentStateSymbols = {
+        gas: stateTypes.gas.defaultSymbol,
+        liquid: stateTypes.liquid.defaultSymbol,
+        solid: stateTypes.solid.defaultSymbol,
+        unknown: stateTypes.unknown.defaultSymbol,
+      };
+
+      // 레이아웃 디자인 상태 (초기값)
+      // top, left는 컨테이너 기준 백분율이며, transform: translate(-50%, -50%)로 중앙 정렬됨
+      // size는 rem 단위로 폰트 크기
+      let currentLayout = {
+        number:      { top: 12.5,  left: 12.5,  size: 0.8,  label: "원자 번호",   visible: true, font: "'Inter', sans-serif", bold: true, italic: false, color: "#374151" },
+        symbol:      { top: 37.5, left: 50, size: 2.15, label: "원소 기호",   visible: true, font: "'Inter', sans-serif", bold: true,  italic: false, color: "#000000" },
+        nameKr:      { top: 64.75, left: 50, size: 1.25,  label: "한글 이름",   visible: true, font: "'Inter', sans-serif", bold: true, italic: false, color: "#111827" },
+        nameEn:      { top: 80, left: 50, size: 0.6,  label: "영어 이름",   visible: true, font: "'Inter', sans-serif", bold: true, italic: false, color: "#4b5563" },
+        weight:      { top: 90, left: 17.5,  size: 0.6,  label: "원자량",      visible: true, font: "'Inter', sans-serif", bold: false, italic: false, color: "#6b7280" },
+        stateMarker: { top: 12.5, left: 88.75, size: 0.8,  label: "상온 상태",   visible: true, font: "'Inter', sans-serif", bold: true,  italic: false, color: "inherit" },
+      };
+
+      // 현재 편집 중인 원소 데이터
+      let selectedLayoutKeys = [];
+
+      // 현재 편집 중인 원소 데이터
+      let currentElementToEdit = null;
+
+      // 1rem에 해당하는 픽셀 값을 동적으로 가져오는 함수
+      function getRootFontSizePx() {
+        return parseFloat(getComputedStyle(document.documentElement).fontSize);
+      }
+
+      // DOM 업데이트 시 사용할 상온 상태 심볼을 가져오는 함수
+      function getStateSymbol(state_at_stp) {
+        return currentStateSymbols[state_at_stp] || currentStateSymbols.unknown;
+      }
+
+      // 주기율표 렌더링 함수
+      function renderTable() {
+        const table = document.getElementById("periodic-table");
+        table.innerHTML = ""; // 기존 내용 초기화
+
+        // 란타넘/악티늄족 자리 표시
+        const createPlaceholder = (row, col, text) => {
+          const div = document.createElement("div");
+          div.className =
+            "element p-1 border border-gray-200 shadow-sm bg-gray-100 text-gray-400 text-center flex-col justify-center items-center cursor-default hover:scale-100 hover:shadow-none";
+          div.style.gridRow = row;
+          div.style.gridColumn = col;
+          div.style.display = "flex";
+          div.style.flexDirection = "column";
+          div.innerHTML = text;
+          table.appendChild(div);
+        };
+
+        // 란타넘족과 악티늄족의 표준 자리 (주기 6, 7의 3열)에 플레이스홀더를 생성
+        // 사용자가 La(57)의 위치를 변경해도 플레이스홀더는 고정
+        createPlaceholder(6, 3, "<div>57-71</div><div>란타넘족</div>");
+        createPlaceholder(7, 3, "<div>89-103</div><div>악티늄족</div>");
+
+        // 모든 원소 렌더링
+        elements.forEach((el) => {
+          const div = document.createElement("div");
+          div.className =
+            "element p-1 border border-gray-200 shadow-sm transition-all duration-200 relative text-center";
+
+          // 원소 데이터의 row/col 값으로 그리드 위치 지정 (사용자 편집 가능)
+          div.style.gridRow = el.row;
+          div.style.gridColumn = el.col;
+          div.dataset.category = el.category;
+          div.dataset.number = el.number; // 원소 번호 추가 (디자인 편집용)
+
+          const stateType = el.state_at_stp;
+          const stateSymbol = getStateSymbol(stateType); // 동적으로 심볼 가져옴
+
+          div.innerHTML = `
+                    <div class="atomic-number" data-layout-key="number">${el.number}</div>
+                    <div class="state-marker state-${stateType}" data-layout-key="stateMarker">${stateSymbol}</div>
+                    <div class="symbol" data-layout-key="symbol">${el.symbol}</div>
+                    <div class="name-kr" data-layout-key="nameKr">${el.name_kr}</div>
+                    <div class="name-en text-gray-700" data-layout-key="nameEn">${el.name_en}</div>
+                    <div class="atomic-weight text-gray-500" data-layout-key="weight">${el.atomic_weight}</div>
+                `;
+
+          table.appendChild(div);
+        });
+
+        // 레이아웃 디자인 적용
+        applyLayoutDesign();
+      }
+
+      // 레이아웃 디자인을 전체 주기율표와 미리보기에 적용하는 함수
+      function applyLayoutDesign() {
+        const styleTag = document.getElementById("layout-style-tag");
+        const layoutPreview = document.getElementById("layout-preview");
+
+        let newCSSText = "";
+
+        // 1. CSS 규칙 생성 (주기율표 전체에 적용)
+        for (const key in currentLayout) {
+          const layout = currentLayout[key];
+          const isVisible = layout.visible;
+          const fontWeight = layout.bold ? 'bold' : 'normal';
+          const fontStyle = layout.italic ? 'italic' : 'normal';
+          const color = (key === 'stateMarker' && layout.color === 'inherit') ? 'inherit' : layout.color;
+
+          newCSSText += `
+                    .element [data-layout-key="${key}"] {
+                        display: ${isVisible ? 'block' : 'none'};
+                        top: ${layout.top}%;
+                        left: ${layout.left}%;
+                        font-family: ${layout.font};
+                        font-weight: ${fontWeight};
+                        font-style: ${fontStyle};
+                        color: ${color};
+                    }
+                `;
+        }
+
+        styleTag.innerHTML = newCSSText;
+
+        // 2. 미리보기 항목 렌더링/업데이트
+        const previewElement = elements.find((e) => e.symbol === "H"); // 수소 원소 데이터 (예시)
+
+        const previewData = [
+          { key: "number", value: "1", class: "atomic-number" },
+          { key: "symbol", value: "H", class: "symbol" },
+          { key: "nameKr", value: "수소", class: "name-kr" },
+          { key: "nameEn", value: "Hydrogen", class: "name-en text-gray-700" },
+          {
+            key: "weight",
+            value: "1.008",
+            class: "atomic-weight text-gray-500",
+          },
+          { key: "stateMarker", value: "G", class: "state-marker state-gas" },
+        ];
+
+        // 미리보기 블록의 배경색도 수소에 맞춤
+        layoutPreview.style.backgroundColor =
+          document.documentElement.style.getPropertyValue("--color-nonmetal");
+
+        previewData.forEach((data) => {
+          let element = layoutPreview.querySelector(
+            `[data-layout-key="${data.key}"]`
+          );
+          if (!element) {
+            element = document.createElement("div");
+            element.dataset.layoutKey = data.key;
+            element.className = data.class;
+            element.textContent = data.value;
+            layoutPreview.appendChild(element);
+
+            // 드래그 기능
+            setupDragListener(element);
+          }
+
+          // 인라인 스타일 업데이트 (미리보기)
+          const layout = currentLayout[data.key];
+          element.style.display = layout.visible ? 'block' : 'none';
+          element.style.top = `${layout.top}%`;
+          element.style.left = `${layout.left}%`;
+          element.style.fontFamily = layout.font;
+          element.style.fontWeight = layout.bold ? 'bold' : 'normal';
+          element.style.fontStyle = layout.italic ? 'italic' : 'normal';
+
+          if (data.key === 'stateMarker' && layout.color === 'inherit') {
+            element.style.color = 'inherit';
+          } else {
+            element.style.color = layout.color;
+          }
+        });
+
+        // 숨겨진 항목 목록 업데이트
+        renderHiddenItemsControls();
+      }
+
+      // 숨겨진 항목 컨트롤 UI 렌더링
+      function renderHiddenItemsControls() {
+        const container = document.getElementById('hidden-items-controls');
+        container.innerHTML = '';
+
+        const hiddenItems = Object.entries(currentLayout).filter(([key, layout]) => !layout.visible);
+
+        if (hiddenItems.length === 0) {
+          container.style.display = 'none';
+          return;
+        }
+        
+        container.style.display = 'block';
+        
+        let listHTML = '<h4 class="text-sm font-semibold mb-2 border-b pb-1">숨겨진 항목</h4><ul class="space-y-2">';
+        hiddenItems.forEach(([key, layout]) => {
+          listHTML += `
+            <li class="flex items-center justify-between text-sm">
+              <span>${layout.label}</span>
+              <button data-key="${key}" class="show-item-btn text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600">표시</button>
+            </li>
+          `;
+        });
+        listHTML += '</ul>';
+        container.innerHTML = listHTML;
+
+        // Event Listeners for the new buttons
+        document.querySelectorAll('.show-item-btn').forEach(btn => {
+          btn.addEventListener('click', e => {
+            const key = e.target.dataset.key;
+            if (currentLayout[key]) {
+              currentLayout[key].visible = true;
+              applyLayoutDesign();
+              updateElementFontSizes();
+            }
+          });
+        });
+      }
+
+      // 레이아웃 항목 편집기 UI 렌더링 (다중 선택 지원)
+      function renderLayoutEditor() {
+        const controlsContainer = document.getElementById("layout-controls");
+        controlsContainer.innerHTML = "";
+
+        if (selectedLayoutKeys.length === 0) {
+          controlsContainer.classList.add("justify-center", "items-center");
+          controlsContainer.style.minHeight = "150px";
+          controlsContainer.innerHTML =
+            '<p class="text-center text-gray-500">미리보기에서 항목을<br>클릭하여 편집하세요.</p>';
+          return;
+        }
+
+        controlsContainer.classList.remove("justify-center", "items-center");
+        controlsContainer.style.minHeight = "";
+
+        // --- 혼합 상태 확인 로직 ---
+        const firstKey = selectedLayoutKeys[0];
+        const firstLayout = currentLayout[firstKey];
+        let isMixed = {}; // 각 속성별로 혼합 상태인지 저장
+
+        for (const prop of ['visible', 'bold', 'italic', 'color', 'font', 'size']) {
+            isMixed[prop] = selectedLayoutKeys.slice(1).some(key => currentLayout[key][prop] !== firstLayout[prop]);
+        }
+
+        const itemLabel = selectedLayoutKeys.length > 1 ? `${selectedLayoutKeys.length}개 항목 선택됨` : `"${firstLayout.label}" 편집 중`;
+        const editorTitleSize = isMixed.size ? 1 : Math.min(Math.max(firstLayout.size, 1), 1.5);
+
+        const availableFonts = [
+            { name: "Inter / Noto Sans KR (기본)", value: "'Inter', 'Noto Sans KR', sans-serif" },
+            { name: "Pretendard (프리텐다드)", value: "'Pretendard', sans-serif" },
+            { name: "Nanum Gothic (나눔고딕)", value: "'Nanum Gothic', sans-serif" },
+            { name: "Nanum Pen Script (필기체-한)", value: "'Nanum Pen Script', cursive" },
+            { name: "Dancing Script (필기체-영)", value: "'Dancing Script', cursive" },
+            { name: "Merriweather (세리프)", value: "'Merriweather', serif" },
+            { name: "Times New Roman (세리프)", value: "'Times New Roman', serif" },
+            { name: "Arial (산세리프)", value: "Arial, sans-serif" },
+            { name: "Roboto Mono (고정폭)", value: "'Roboto Mono', monospace" },
+            { name: "Courier New (고정폭)", value: "'Courier New', monospace" },
+        ];
+
+        const fontOptions = availableFonts.map(font => 
+            `<option value="${font.value}" style="font-family: ${font.value}; font-size: 1rem;" ${!isMixed.font && font.value === firstLayout.font ? 'selected' : ''}>${font.name}</option>`
+        ).join('');
+
+        const controlDiv = document.createElement("div");
+        controlDiv.className = "w-full flex flex-col space-y-4";
+        controlDiv.innerHTML = `
+          <h5 class="text-base font-semibold border-b pb-2 text-blue-600 whitespace-nowrap overflow-hidden text-ellipsis" style="font-size: ${editorTitleSize}rem;">${itemLabel}</h5>
+          
+          <div class="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+            <label class="flex items-center space-x-2">
+              <input type="checkbox" id="visible-checkbox" class="rounded" ${!isMixed.visible && firstLayout.visible ? 'checked' : ''}>
+              <span>표시</span>
+            </label>
+            <label class="flex items-center space-x-2">
+              <input type="checkbox" id="bold-checkbox" class="rounded" ${!isMixed.bold && firstLayout.bold ? 'checked' : ''}>
+              <span>Bold</span>
+            </label>
+            <label class="flex items-center space-x-2">
+              <input type="checkbox" id="italic-checkbox" class="rounded" ${!isMixed.italic && firstLayout.italic ? 'checked' : ''}>
+              <span>Italic</span>
+            </label>
+            <label class="flex items-center space-x-2 justify-between">
+              <span>색상</span>
+              <input type="color" id="color-picker" value="${isMixed.color ? '#ffffff' : firstLayout.color}" class="w-8 h-8 rounded border-none cursor-pointer">
+            </label>
+          </div>
+
+          <div>
+            <label for="font-family-select" class="text-sm font-medium text-gray-700 mb-1 block">글꼴</label>
+            <select id="font-family-select" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+              ${isMixed.font ? '<option value="" disabled selected>여러 값</option>' : ''}
+              ${fontOptions}
+            </select>
+          </div>
+
+          <div>
+            <label for="font-size-input" class="text-sm font-medium text-gray-700 mb-1 block">폰트 크기 (비율)</label>
+            <div class="flex items-center space-x-2">
+              <input type="range" id="font-size-slider" min="0.1" max="4.0" step="0.05" value="${isMixed.size ? '' : firstLayout.size.toFixed(2)}" class="w-full">
+              <input type="number" id="font-size-input" min="0.1" max="4.0" step="0.05" value="${isMixed.size ? '' : firstLayout.size.toFixed(2)}" class="w-20 p-1 text-center border rounded-md">
+            </div>
+          </div>
+        `;
+        controlsContainer.appendChild(controlDiv);
+
+        // --- Indeterminate/Mixed State UI Update ---
+        ['visible', 'bold', 'italic'].forEach(prop => {
+            if (isMixed[prop]) {
+                document.getElementById(`${prop}-checkbox`).indeterminate = true;
+            }
+        });
+        if (isMixed.color) { document.getElementById('color-picker').value = '#ffffff'; }
+
+
+        // --- Event Listeners (Apply to all selected items) ---
+        const updateAndRender = () => {
+          applyLayoutDesign();
+          updateElementFontSizes();
+        };
+
+        document.getElementById('visible-checkbox').addEventListener('change', e => {
+          selectedLayoutKeys.forEach(key => currentLayout[key].visible = e.target.checked);
+          updateAndRender();
+        });
+        document.getElementById('bold-checkbox').addEventListener('change', e => {
+          selectedLayoutKeys.forEach(key => currentLayout[key].bold = e.target.checked);
+          updateAndRender();
+        });
+        document.getElementById('italic-checkbox').addEventListener('change', e => {
+          selectedLayoutKeys.forEach(key => currentLayout[key].italic = e.target.checked);
+          updateAndRender();
+        });
+        document.getElementById('color-picker').addEventListener('input', e => {
+          selectedLayoutKeys.forEach(key => currentLayout[key].color = e.target.value);
+          updateAndRender();
+        });
+        document.getElementById('font-family-select').addEventListener('change', e => {
+          if(e.target.value === "") return; // Do nothing if "Multiple Values" is selected
+          selectedLayoutKeys.forEach(key => currentLayout[key].font = e.target.value);
+          updateAndRender();
+        });
+
+        const fontSizeInput = document.getElementById("font-size-input");
+        const fontSizeSlider = document.getElementById("font-size-slider");
+        const syncSize = (newValue) => {
+          const newSize = parseFloat(newValue);
+          if (isNaN(newSize) || newSize < 0) return;
+          selectedLayoutKeys.forEach(key => currentLayout[key].size = newSize);
+          fontSizeInput.value = newSize.toFixed(2);
+          fontSizeSlider.value = newSize.toFixed(2);
+          updateAndRender();
+          renderLayoutEditor();
+        };
+        fontSizeInput.addEventListener("input", (e) => syncSize(e.target.value));
+        fontSizeSlider.addEventListener("input", (e) => syncSize(e.target.value));
+      }
+
+      // 상온 상태 마커 스타일(심볼, 색상) UI 렌더링
+      function renderStateStyleControls() {
+        const controlsContainer = document.getElementById(
+          "state-style-controls"
+        );
+        controlsContainer.innerHTML = "";
+
+        for (const [key, value] of Object.entries(stateTypes)) {
+          const controlDiv = document.createElement("div");
+          controlDiv.className =
+            "flex flex-col space-y-1 bg-white p-2 rounded-md shadow-sm";
+
+          controlDiv.innerHTML = `
+                    <span class="text-xs font-medium">${value.name_kr} (${key})</span>
+                    <div class="flex items-center space-x-2">
+                        <!-- 심볼 입력 -->
+                        <input type="text" data-state-key="${key}" data-type="symbol" maxlength="3" value="${currentStateSymbols[key]}"
+                            class="w-12 p-1 text-center border rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm">
+                        <!-- 색상 선택 -->
+                        <input type="color" data-state-key="${key}" data-type="color" value="${stateTypes[key].defaultColor}"
+                            class="w-full h-8 rounded border-none cursor-pointer">
+                    </div>
+                `;
+          controlsContainer.appendChild(controlDiv);
+
+          // CSS 변수 초기화 (혹시 모를 초기값 보장)
+          document.documentElement.style.setProperty(
+            `--color-state-${key}`,
+            stateTypes[key].defaultColor
+          );
+        }
+      }
+
+      // 상온 상태 스타일 변경 핸들러
+      function handleStateStyleChange(e) {
+        const target = e.target;
+        const stateKey = target.dataset.stateKey;
+        const type = target.dataset.type;
+
+        if (!stateKey) return;
+
+        if (type === "symbol") {
+          // 심볼 변경
+          currentStateSymbols[stateKey] = target.value.substring(0, 3); // 최대 3글자
+          renderTable(); // 테이블을 다시 렌더링하여 새 심볼 적용
+        } else if (type === "color") {
+          // 색상 변경
+          const color = target.value;
+          document.documentElement.style.setProperty(
+            `--color-state-${stateKey}`,
+            color
+          );
+          // 색상 변경은 CSS 변수를 통해 자동으로 적용되므로, 테이블 재렌더링 불필요
+        }
+      }
+
+      // 드래그 기능 설정 (다중 선택 및 스냅 지원)
+      function setupDragListener(draggable) {
+        let isDragging = false;
+        let startX, startY;
+        let dragStartStates = []; // 드래그 시작 시점의 여러 항목 상태 저장
+        const preview = document.getElementById("layout-preview");
+        const snapLineV = document.getElementById("snap-line-v");
+        const snapLineH = document.getElementById("snap-line-h");
+
+        draggable.addEventListener("mousedown", (e) => {
+          e.stopPropagation();
+
+          const key = draggable.dataset.layoutKey;
+
+          if (e.ctrlKey) {
+            // Ctrl 키 누른 경우: 드래그 시작하지 않고 선택/해제만
+            const index = selectedLayoutKeys.indexOf(key);
+            if (index > -1) {
+              selectedLayoutKeys.splice(index, 1);
+            } else {
+              selectedLayoutKeys.push(key);
+            }
+            preview.querySelectorAll("[data-layout-key]").forEach(el => {
+              el.classList.toggle("selected", selectedLayoutKeys.includes(el.dataset.layoutKey));
+            });
+            renderLayoutEditor();
+            return;
+          }
+
+          if (!selectedLayoutKeys.includes(key)) {
+            selectedLayoutKeys = [key];
+            preview.querySelectorAll("[data-layout-key]").forEach(el => {
+              el.classList.toggle("selected", el.dataset.layoutKey === key);
+            });
+            renderLayoutEditor();
+          }
+
+          isDragging = true;
+          
+          dragStartStates = selectedLayoutKeys.map(k => ({
+            key: k,
+            left: currentLayout[k].left,
+            top: currentLayout[k].top
+          }));
+
+          startX = e.clientX;
+          startY = e.clientY;
+
+          preview.querySelectorAll(".selected").forEach(el => el.style.transition = "none");
+
+          document.addEventListener("mousemove", onMouseMove);
+          document.addEventListener("mouseup", onMouseUp);
+        });
+
+        function onMouseMove(e) {
+          if (!isDragging) return;
+
+          const dx = e.clientX - startX;
+          const dy = e.clientY - startY;
+
+          const previewRect = preview.getBoundingClientRect();
+          const dLeft = (dx / previewRect.width) * 100;
+          const dTop = (dy / previewRect.height) * 100;
+
+          // 기본적으로 스냅 라인 숨기기
+          snapLineV.style.display = 'none';
+          snapLineH.style.display = 'none';
+
+          // 마우스로 직접 드래그하는 주체 항목의 새 위치 계산
+          const primaryStartState = dragStartStates.find(s => s.key === draggable.dataset.layoutKey);
+          let primaryNewLeft = primaryStartState.left + dLeft;
+          let primaryNewTop = primaryStartState.top + dTop;
+
+          // 스냅 로직
+          const SNAP_THRESHOLD = 2.5; // 스냅 감도 (백분율)
+          if (Math.abs(primaryNewTop - 50) < SNAP_THRESHOLD) {
+            primaryNewTop = 50;
+            snapLineH.style.display = 'block';
+          }
+          if (Math.abs(primaryNewLeft - 50) < SNAP_THRESHOLD) {
+            primaryNewLeft = 50;
+            snapLineV.style.display = 'block';
+          }
+
+          // 스냅이 적용된 최종 델타값 계산
+          const finalDLeft = primaryNewLeft - primaryStartState.left;
+          const finalDTop = primaryNewTop - primaryStartState.top;
+
+          // 선택된 모든 항목에 최종 델타값을 적용하여 위치 업데이트
+          dragStartStates.forEach(startState => {
+            let newLeft = startState.left + finalDLeft;
+            let newTop = startState.top + finalDTop;
+
+            newLeft = Math.max(0, Math.min(100, newLeft));
+            newTop = Math.max(0, Math.min(100, newTop));
+
+            currentLayout[startState.key].left = newLeft;
+            currentLayout[startState.key].top = newTop;
+          });
+
+          applyLayoutDesign();
+        }
+
+        function onMouseUp() {
+          if (!isDragging) return;
+          isDragging = false;
+          
+          // 스냅 라인 숨기기
+          snapLineV.style.display = 'none';
+          snapLineH.style.display = 'none';
+
+          preview.querySelectorAll(".selected").forEach(el => el.style.transition = "");
+
+          document.removeEventListener("mousemove", onMouseMove);
+          document.removeEventListener("mouseup", onMouseUp);
+        }
+      }
+
+      // 계열 색상 커스터마이징 UI 렌더링
+      function renderColorControls() {
+        const colorControlsContainer =
+          document.getElementById("color-controls");
+        colorControlsContainer.innerHTML = "";
+
+        for (const [key, value] of Object.entries(categories)) {
+          // CSS 변수 초기값 설정
+          document.documentElement.style.setProperty(
+            `--color-${key}`,
+            value.defaultColor
+          );
+
+          const controlHTML = `
+                    <label class="flex items-center justify-between space-x-2 bg-white p-2 rounded-md shadow-sm">
+                        <span class="text-xs">${value.name_kr}</span>
+                        <input type="color" data-category="${key}" value="${value.defaultColor}" class="w-8 h-8 rounded border-none cursor-pointer">
+                    </label>
+                `;
+          colorControlsContainer.innerHTML += controlHTML;
+        }
+      }
+
+      // 제어판 이벤트 리스너 초기화
+      function initControls() {
+        const table = document.getElementById("periodic-table");
+
+        // 정보 토글
+        const toggleHandler = (id, className) => {
+          document.getElementById(id).addEventListener("change", (e) => {
+            table.classList.toggle(className, !e.target.checked);
+          });
+        };
+
+        toggleHandler("toggle-categories", "hide-categories");
+
+
+        // 상온 상태 스타일 변경 리스너
+        document
+          .getElementById("state-style-controls")
+          .addEventListener("input", handleStateStyleChange);
+
+        // 계열 색상 변경 리스너
+        document
+          .getElementById("color-controls")
+          .addEventListener("input", (e) => {
+            if (e.target.type === "color") {
+              const category = e.target.dataset.category;
+              const color = e.target.value;
+              document.documentElement.style.setProperty(
+                `--color-${category}`,
+                color
+              );
+            }
+          });
+
+
+      }
+
+      // DOM이 로드되면 스크립트 실행
+      document.addEventListener("DOMContentLoaded", () => {
+        renderTable();
+        renderColorControls();
+        renderStateStyleControls();
+        renderLayoutEditor();
+        initControls();
+      });
+    </script>
+    <script>
+      // 폰트 크기 동적 조절 스크립트
+
+      // 모든 .element의 폰트 크기를 업데이트하는 함수
+      function updateElementFontSizes() {
+        document.querySelectorAll(".element").forEach(el => updateSingleElementFontSize(el));
+      }
+      
+      // 단일 .element의 폰트 크기를 업데이트하는 함수
+      function updateSingleElementFontSize(el) {
+        const width = el.offsetWidth;
+        if (width === 0) return;
+
+        const BASE_FONT_RATIO = 0.13;
+        const baseSize = width * BASE_FONT_RATIO;
+
+        const layoutItems = el.querySelectorAll("[data-layout-key]");
+        layoutItems.forEach(item => {
+          const key = item.dataset.layoutKey;
+          if (currentLayout[key]) {
+            const layout = currentLayout[key];
+            const finalPxSize = baseSize * layout.size;
+            item.style.fontSize = `${finalPxSize}px`;
+          }
+        });
+      }
+
+      // ResizeObserver를 생성하여 각 .element의 크기 변경을 감지
+      const resizeObserver = new ResizeObserver(entries => {
+        for (let entry of entries) {
+          updateSingleElementFontSize(entry.target);
+        }
+      });
+
+      // DOM이 로드된 후, 초기 렌더링이 완료되면 모든 .element를 관찰 시작
+      document.addEventListener('DOMContentLoaded', () => {
+        // renderTable()이 완료된 후 실행되어야 함
+        setTimeout(() => {
+          document.querySelectorAll('.element').forEach(el => {
+            resizeObserver.observe(el);
+          });
+        }, 0);
+
+        const exportBtn = document.getElementById("export-btn");
+        const exportFormatSelect = document.getElementById("export-format-select");
+
+        // 내보내기 버튼 이벤트 리스너
+        exportBtn.addEventListener("click", async () => {
+          const format = exportFormatSelect.value;
+          const tableElement = document.getElementById("periodic-table");
+
+          exportBtn.disabled = true;
+          exportBtn.innerHTML = '내보내기 중...';
+
+          try {
+            const canvas = await renderTableToCanvas(tableElement);
+            const imgData = canvas.toDataURL(`image/${format}`);
+            const link = document.createElement('a');
+            link.download = `periodic-table.${format}`;
+
+            if (format === 'pdf') {
+              const { jsPDF } = window.jspdf;
+              const pdf = new jsPDF('l', 'px', [canvas.width, canvas.height]);
+              pdf.addImage(imgData, 'PNG', 0, 0, canvas.width, canvas.height);
+              pdf.save('periodic-table.pdf');
+            } else {
+              link.href = imgData;
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }
+          } catch (err) {
+            console.error(`${format.toUpperCase()} export error:`, err);
+            alert(`파일을 내보내는 중 오류이 발생했습니다: ${err.message}`);
+          } finally {
+            exportBtn.disabled = false;
+            exportBtn.innerHTML = '내보내기';
+          }
+        });
+      });
+
+      // 주기율표를 Canvas에 직접 렌더링하는 함수
+      async function renderTableToCanvas(tableElement) {
+        const scale = 3; // 고품질 출력을 위한 스케일 팩터
+        const cellWidth = 60 * scale;
+        const cellHeight = 60 * scale;
+        const gap = 4 * scale;
+        const borderWidth = 1 * scale;
+        const padding = 4 * scale;
+
+        const numColumns = 18;
+        const numRows = 10; // 란타넘/악티늄족 포함
+
+        const canvasWidth = (numColumns * cellWidth) + ((numColumns - 1) * gap);
+        const canvasHeight = (numRows * cellHeight) + ((numRows - 1) * gap);
+
+        const canvas = document.createElement('canvas');
+        canvas.width = canvasWidth;
+        canvas.height = canvasHeight;
+        const ctx = canvas.getContext('2d');
+
+        // 배경 채우기
+        ctx.fillStyle = '#ffffff'; // 흰색 배경
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // 폰트 로드를 기다림 (선택 사항이지만 정확한 텍스트 측정을 위해 중요)
+        await document.fonts.ready;
+
+        // 란타넘/악티늄족 자리 표시 (텍스트)
+        const drawPlaceholder = (text1, text2, gridRow, gridCol) => {
+            const x = (gridCol - 1) * (cellWidth + gap);
+            const y = (gridRow - 1) * (cellHeight + gap);
+
+            ctx.fillStyle = '#f3f4f6'; // gray-100
+            ctx.fillRect(x, y, cellWidth, cellHeight);
+            ctx.strokeStyle = '#d1d5db'; // gray-300
+            ctx.lineWidth = borderWidth;
+            ctx.strokeRect(x, y, cellWidth, cellHeight);
+
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillStyle = '#6b7280'; // Medium Gray
+
+            ctx.font = `${10 * scale}px "Inter", "Noto Sans KR", sans-serif`;
+            ctx.fillText(text1, x + cellWidth / 2, y + cellHeight / 2 - (5 * scale));
+            ctx.fillText(text2, x + cellWidth / 2, y + cellHeight / 2 + (5 * scale));
+        };
+
+        drawPlaceholder('57-71', '란타넘족', 6, 3);
+        drawPlaceholder('89-103', '악티늄족', 7, 3);
+
+
+        elements.forEach(el => {
+          let gridCol = el.col;
+          let gridRow = el.row;
+
+          // 란타넘족과 악티늄족의 실제 위치 조정
+          if (el.category === 'lanthanide') {
+            gridRow = 9;
+            gridCol = el.number - 54; // La(57) -> col 3, Lu(71) -> col 17
+          } else if (el.category === 'actinide') {
+            gridRow = 10;
+            gridCol = el.number - 86; // Ac(89) -> col 3, Lr(103) -> col 17
+          }
+
+          const x = (gridCol - 1) * (cellWidth + gap);
+          const y = (gridRow - 1) * (cellHeight + gap);
+
+          // 배경색
+          const toggleCategoriesCheckbox = document.getElementById('toggle-categories');
+          let bgColor = '#f3f4f6'; // Default gray if categories are hidden
+          if (toggleCategoriesCheckbox && toggleCategoriesCheckbox.checked) {
+            bgColor = getComputedStyle(document.documentElement).getPropertyValue(`--color-${el.category}`) || '#d1d5db';
+          }
+          ctx.fillStyle = bgColor;
+          ctx.fillRect(x, y, cellWidth, cellHeight);
+
+          // 테두리
+          ctx.strokeStyle = '#d1d5db'; // gray-300
+          ctx.lineWidth = borderWidth;
+          ctx.strokeRect(x, y, cellWidth, cellHeight);
+
+          // 텍스트 렌더링
+          for (const key in currentLayout) {
+            const layout = currentLayout[key];
+            if (!layout.visible) continue;
+
+            let text = '';
+            let textColor = layout.color;
+
+            switch (key) {
+              case 'number':
+                text = el.number.toString();
+                break;
+              case 'symbol':
+                text = el.symbol;
+                break;
+              case 'nameKr':
+                text = el.name_kr;
+                break;
+              case 'nameEn':
+                text = el.name_en;
+                break;
+              case 'weight':
+                text = el.atomic_weight;
+                break;
+              case 'stateMarker':
+                text = getStateSymbol(el.state_at_stp);
+                if (textColor === 'inherit') {
+                    textColor = getComputedStyle(document.documentElement).getPropertyValue(`--color-state-${el.state_at_stp}`);
+                }
+                break;
+            }
+
+            if (text) {
+              ctx.save(); // 현재 상태 저장
+
+              const BASE_FONT_RATIO = 0.13; // updateSingleElementFontSize와 동일한 비율 사용
+              let fontSize = (cellWidth / scale * BASE_FONT_RATIO) * layout.size * scale; // 화면에 표시되는 폰트 크기 계산 방식과 동일하게 적용
+              if (fontSize < (6 * scale)) fontSize = 6 * scale; // 최소 폰트 크기
+
+              let fontStyle = layout.italic ? 'italic' : 'normal';
+              let fontWeight = layout.bold ? 'bold' : 'normal';
+
+              ctx.font = `${fontStyle} ${fontWeight} ${fontSize}px ${layout.font}`;
+              ctx.fillStyle = textColor;
+              ctx.textAlign = 'center';
+              ctx.textBaseline = 'middle';
+
+              // 레이아웃 top/left 백분율을 픽셀 위치로 변환
+              const textX = x + (cellWidth * layout.left) / 100;
+              const textY = y + (cellHeight * layout.top) / 100;
+
+              ctx.fillText(text, textX, textY);
+              ctx.restore(); // 이전 상태 복원
+            }
+          }
+        });
+
+        return canvas;
+      }
+    </script>
+  </body>
+</html>

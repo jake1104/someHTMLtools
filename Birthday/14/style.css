@@ -1,0 +1,259 @@
+body {
+  background-color: #333;
+}
+
+.cake {
+  position: absolute;
+  width: 250px;
+  height: 200px;
+  top: 50%;
+  left: 50%;
+  margin-top: -70px;
+  margin-left: -125px;
+}
+
+.shaking {
+  /* Animation will be applied directly to popper-container via JS */
+}
+
+.plate {
+  width: 270px;
+  height: 110px;
+  position: absolute;
+  bottom: -10px;
+  left: -10px;
+  background-color: #ccc;
+  border-radius: 50%;
+  box-shadow: 0 2px 0 rgb(178.5, 178.5, 178.5), 0 4px 0 rgb(178.5, 178.5, 178.5), 0 5px 40px rgba(0, 0, 0, 0.5);
+}
+
+.cake > * {
+  position: absolute;
+}
+
+.layer {
+  position: absolute;
+  display: block;
+  width: 250px;
+  height: 100px;
+  border-radius: 50%;
+  background-color: #553c13;
+  box-shadow: 0 2px 0px rgb(105.8413461538, 74.7115384615, 23.6586538462), 0 4px 0px rgb(50.8201923077, 35.8730769231, 11.3598076923), 0 6px 0px rgb(49.9865384615, 35.2846153846, 11.1734615385), 0 8px 0px rgb(49.1528846154, 34.6961538462, 10.9871153846), 0 10px 0px rgb(48.3192307692, 34.1076923077, 10.8007692308), 0 12px 0px rgb(47.4855769231, 33.5192307692, 10.6144230769), 0 14px 0px rgb(46.6519230769, 32.9307692308, 10.4280769231), 0 16px 0px rgb(45.8182692308, 32.3423076923, 10.2417307692), 0 18px 0px rgb(44.9846153846, 31.7538461538, 10.0553846154), 0 20px 0px rgb(44.1509615385, 31.1653846154, 9.8690384615), 0 22px 0px rgb(43.3173076923, 30.5769230769, 9.6826923077), 0 24px 0px rgb(42.4836538462, 29.9884615385, 9.4963461538), 0 26px 0px rgb(41.65, 29.4, 9.31), 0 28px 0px rgb(40.8163461538, 28.8115384615, 9.1236538462), 0 30px 0px rgb(39.9826923077, 28.2230769231, 8.9373076923);
+}
+
+.layer-top {
+  top: 0px;
+}
+
+.layer-middle {
+  top: 33px;
+}
+
+.layer-bottom {
+  top: 66px;
+}
+
+.icing {
+  top: 2px;
+  left: 5px;
+  background-color: #f0e4d0;
+  width: 240px;
+  height: 90px;
+  border-radius: 50%;
+}
+.icing:before {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  bottom: 6px;
+  left: 5px;
+  background-color: rgb(243.7016129032, 234.6629032258, 219.5983870968);
+  box-shadow: 0 0 4px rgb(246.1693548387, 239.1048387097, 227.3306451613), 0 0 4px rgb(246.1693548387, 239.1048387097, 227.3306451613), 0 0 4px rgb(246.1693548387, 239.1048387097, 227.3306451613);
+  border-radius: 50%;
+  z-index: 1;
+}
+
+.drip {
+  display: block;
+  width: 50px;
+  height: 60px;
+  border-bottom-left-radius: 25px;
+  border-bottom-right-radius: 25px;
+  background-color: #f0e4d0;
+}
+
+.drip1 {
+  top: 53px;
+  left: 5px;
+  transform: skewY(15deg);
+  height: 48px;
+  width: 40px;
+}
+
+.drip2 {
+  top: 69px;
+  left: 181px;
+  transform: skewY(-15deg);
+}
+
+.drip3 {
+  top: 54px;
+  left: 90px;
+  width: 80px;
+  border-bottom-left-radius: 40px;
+  border-bottom-right-radius: 40px;
+}
+
+.candle-large {
+  background-color: #7B020B;
+  width: 16px;
+  height: 50px;
+  border-radius: 8px/4px;
+  top: -20px;
+  left: 50%;
+  margin-left: -8px;
+  z-index: 10;
+}
+
+.candle-small {
+  background-color: #7B020B;
+  width: 12px;
+  height: 40px;
+  border-radius: 6px/3px;
+  z-index: 10;
+  position: absolute;
+}
+
+.candle-large:before, .candle-small:before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 8px;
+  border-radius: 50%;
+  background-color: rgb(173.184, 2.816, 15.488);
+}
+
+.flame {
+  position: absolute;
+  background-color: orange;
+  width: 15px;
+  height: 35px;
+  border-radius: 10px 10px 10px 10px/25px 25px 10px 10px;
+  top: -34px;
+  left: 50%;
+  margin-left: -7.5px;
+  z-index: 10;
+  box-shadow: 0 0 10px rgba(255, 165, 0, 0.5), 0 0 20px rgba(255, 165, 0, 0.5), 0 0 60px rgba(255, 165, 0, 0.5), 0 0 80px rgba(255, 165, 0, 0.5);
+  transform-origin: 50% 90%;
+  animation: flicker 1s ease-in-out alternate infinite;
+}
+
+@keyframes flicker {
+  0% {
+    transform: skewX(5deg) scale(1);
+    box-shadow: 0 0 10px rgba(255, 165, 0, 0.2), 0 0 20px rgba(255, 165, 0, 0.2), 0 0 60px rgba(255, 165, 0, 0.2), 0 0 80px rgba(255, 165, 0, 0.2);
+  }
+  25% {
+    transform: skewX(-5deg) scale(1.05);
+    box-shadow: 0 0 10px rgba(255, 165, 0, 0.5), 0 0 20px rgba(255, 165, 0, 0.5), 0 0 60px rgba(255, 165, 0, 0.5), 0 0 80px rgba(255, 165, 0, 0.5);
+  }
+  50% {
+    transform: skewX(10deg) scale(0.95);
+    box-shadow: 0 0 10px rgba(255, 165, 0, 0.3), 0 0 20px rgba(255, 165, 0, 0.3), 0 0 60px rgba(255, 165, 0, 0.3), 0 0 80px rgba(255, 165, 0, 0.3);
+  }
+  75% {
+    transform: skewX(-10deg) scale(1.1);
+    box-shadow: 0 0 10px rgba(255, 165, 0, 0.4), 0 0 20px rgba(255, 165, 0, 0.4), 0 0 60px rgba(255, 165, 0, 0.4), 0 0 80px rgba(255, 165, 0, 0.4);
+  }
+  100% {
+    transform: skewX(5deg) scale(1);
+    box-shadow: 0 0 10px rgba(255, 165, 0, 0.5), 0 0 20px rgba(255, 165, 0, 0.5), 0 0 60px rgba(255, 165, 0, 0.5), 0 0 80px rgba(255, 165, 0, 0.5);
+  }
+}
+
+/*# sourceMappingURL=style.css.map */
+
+.popper-container {
+  position: absolute;
+  top: -150px;
+}
+
+.popper-container.left {
+  left: -125px;
+}
+
+.popper-container.right {
+  right: -125px;
+}
+
+.popper-shell {
+  width: 40px;
+  height: 60px;
+  background: repeating-linear-gradient(
+    45deg,
+    #f1c40f,
+    #f1c40f 8px,
+    #e74c3c 8px,
+    #e74c3c 16px
+  );
+  position: absolute;
+  top: 0;
+  left: -20px;
+  clip-path: polygon(50% 100%, 0 0, 100% 0);
+  transform-origin: top center;
+}
+
+.popper-container.left .popper-shell {
+  transform: rotate(45deg);
+}
+
+@keyframes popper-rotate {
+  0%, 100% { transform: rotateZ(0deg); }
+  25% { transform: rotateZ(-15deg); }
+  50% { transform: rotateZ(15deg); }
+  75% { transform: rotateZ(-15deg); }
+}
+
+.rotating {
+  animation: popper-rotate 0.2s linear;
+}
+
+.popper-container.right .popper-shell {
+  transform: rotate(-45deg);
+}
+
+.confetti {
+  position: absolute;
+  width: 8px;
+  height: 12px;
+  background-color: #f00;
+  opacity: 0;
+}
+
+@keyframes confetti-flutter {
+  0% {
+    transform: translate(0, 0) rotateZ(0);
+    opacity: 1;
+  }
+  25% {
+    transform: translate(var(--x1), var(--y1)) rotateZ(var(--r1));
+  }
+  50% {
+    transform: translate(var(--x2), var(--y2)) rotateZ(var(--r2));
+  }
+  75% {
+    transform: translate(var(--x3), var(--y3)) rotateZ(var(--r3));
+  }
+  100% {
+    transform: translate(var(--x-final), var(--y-final)) rotateZ(var(--r-final));
+    opacity: 0;
+  }
+}
+
+.explode .confetti {
+  animation: confetti-flutter 4s linear forwards;
+}
+

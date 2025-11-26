@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Collatz Directed Graph — D3 시뮬레이션</title>
+    <style>
+      /* 기본 페이지 레이아웃 */
+      html, body { height: 100%; margin: 0; font-family: Inter, system-ui, Arial; }
+      #app { height: 100vh; display: flex; flex-direction: column; }
+      header { padding: 8px 12px; background: linear-gradient(90deg,#f7fafc,#eef2ff); border-bottom: 1px solid #e6eef9; }
+      header h1 { margin: 0; font-size: 16px; }
+      #controls { padding: 8px 12px; display: flex; gap: 8px; align-items: center; }
+      button { padding: 6px 10px; border-radius: 6px; border: 1px solid #cbd5e1; background: white; cursor: pointer; }
+      button:active { transform: translateY(1px); }
+      #vis { flex: 1; background: #fafafa; }
+      .node { stroke: #ddd; stroke-width: 1px; }
+      .node text { pointer-events: none; font-size: 10px; font-weight: 600; fill: black; }
+      .link { fill: none; stroke: #333; stroke-width: 2.5; stroke-opacity: 0.9; }
+      .legend { font-size: 12px; }
+      .status { margin-left: 8px; color: #374151; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>Collatz 방향 그래프 시뮬레이션 (1 → 100)</h1>
+      </header>
+      <div id="controls">
+        <button id="startBtn">시작</button>
+        <button id="pauseBtn">일시정지</button>
+        <label for="speed">속도</label>
+        <input id="speed" type="range" min="0.1" max="2.5" step="0.1" value="1" />
+        <div class="status" id="status">준비됨</div>
+      </div>
+      <div id="vis"></div>
+    </div>
+
+    <!-- d3.js v7 -->
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script>
+      // 설정값
+      const WIDTH = window.innerWidth;
+      const HEIGHT = window.innerHeight - 120;
+      const MAX_N = 100; // 1..MAX_N
+      const NODE_RADIUS = 18;
+      let animationSpeed = 1.0; // 슬라이더로 조절
+
+      // 그래프 데이터 저장소
+      const nodesById = new Map(); // id -> nodeObj
+      const links = []; // {source: id, target: id, pathId}
+      const pathsMeta = []; // 각 시작 n에 대한 메타정보
+
+      // D3 시각화 준비
+      const svg = d3.select('#vis')
+        .append('svg')
+        .attr('width', '100%')
+        .attr('height', HEIGHT)
+        .attr('viewBox', `0 0 ${WIDTH} ${HEIGHT}`)
+        .style('display', 'block');
+
+      // pan/zoom 그룹
+      const gMain = svg.append('g').attr('class', 'g-main');
+
+      // 화살표 마커
+      svg.append('defs').append('marker')
+        .attr('id', 'arrow')
+        .attr('viewBox', '0 -5 10 10')
+        .attr('refX', 10)
+        .attr('refY', 0)
+        .attr('markerWidth', 6)
+        .attr('markerHeight', 6)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,-5L10,0L0,5');
+
+      // 링크 그룹과 노드 그룹
+      const linkLayer = gMain.append('g').attr('class', 'link-layer');
+      const nodeLayer = gMain.append('g').attr('class', 'node-layer');
+
+      // force simulation
+      const simulation = d3.forceSimulation()
+        .force('link', d3.forceLink().id(d => d.id).distance(d => 80))
+        .force('charge', d3.forceManyBody().strength(-200))
+        .force('center', d3.forceCenter(WIDTH / 2, HEIGHT / 2))
+        .force('collision', d3.forceCollide().radius(NODE_RADIUS + 6));
+
+      // SVG zoom
+      const zoom = d3.zoom()
+        .scaleExtent([0.2, 4])
+        .on('zoom', (event) => { gMain.attr('transform', event.transform); });
+
+      svg.call(zoom);
+
+      // 노드/링크 렌더러
+      function updateGraph() {
+        const nodeData = Array.from(nodesById.values());
+
+        // links selection
+        const linkSel = linkLayer.selectAll('.link').data(links, d => `${d.source}->${d.target}`);
+
+        const linkEnter = linkSel.enter().append('path')
+          .attr('class', 'link')
+          .attr('marker-end', 'url(#arrow)')
+          .style('stroke-width', 2)
+          .style('stroke', d => d.color || '#999')
+          .attr('opacity', 0);
+
+        linkEnter.transition().duration(300).attr('opacity', 1);
+
+        linkSel.exit().transition().duration(200).attr('opacity', 0).remove();
+
+        // nodes selection
+        const nodeSel = nodeLayer.selectAll('.node').data(nodeData, d => d.id);
+
+        const nodeEnter = nodeSel.enter().append('g')
+          .attr('class', 'node')
+          .call(d3.drag()
+            .on('start', (event, d) => {
+              if (!event.active) simulation.alphaTarget(0.3).restart();
+              d.fx = d.x;
+              d.fy = d.y;
+            })
+            .on('drag', (event, d) => {
+              d.fx = event.x;
+              d.fy = event.y;
+            })
+            .on('end', (event, d) => {
+              if (!event.active) simulation.alphaTarget(0);
+              d.fx = null;
+              d.fy = null;
+            })
+          );
+
+        nodeEnter.append('circle')
+          .attr('r', NODE_RADIUS)
+          .attr('fill', d => d.color)
+          .style('stroke', '#cbd5e1')
+          .style('stroke-width', 1);
+
+        nodeEnter.append('text')
+          .attr('text-anchor', 'middle')
+          .attr('dy', '0.36em')
+          .text(d => d.id)
+          .style('stroke', 'none')
+          .style('stroke-width', 0);
+
+        nodeSel.select('circle').transition().duration(300).attr('fill', d => d.color);
+        nodeSel.select('text').text(d => d.id);
+
+        nodeSel.exit().transition().duration(200).style('opacity', 0).remove();
+
+        simulation.nodes(nodeData).on('tick', ticked);
+        simulation.force('link').links(links);
+        simulation.alpha(0.8).restart();
+      }
+
+      // 링크와 노드의 위치 업데이트
+      function ticked() {
+        linkLayer.selectAll('.link').attr('d', d => {
+          const s = d.source;
+          const t = d.target;
+          if (!s || !t) return '';
+          const dx = t.x - s.x;
+          const dy = t.y - s.y;
+          const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+          const normX = dx / dist;
+          const normY = dy / dist;
+          const sourceX = s.x + normX * NODE_RADIUS * 0.9;
+          const sourceY = s.y + normY * NODE_RADIUS * 0.9;
+          const targetX = t.x - normX * NODE_RADIUS;
+          const targetY = t.y - normY * NODE_RADIUS;
+          return `M${sourceX},${sourceY} L${targetX},${targetY}`;
+        });
+
+        nodeLayer.selectAll('.node')
+          .attr('transform', d => `translate(${d.x},${d.y})`);
+      }
+
+      // 헬퍼 함수: 노드 가져오기
+      function getNodeById(id) {
+        return nodesById.get(String(id));
+      }
+
+      // Collatz 수열 계산
+      function collatzSequence(n) {
+        const seq = [n];
+        let x = n;
+        while (x !== 1) {
+          if (x % 2 === 0) x = x / 2;
+          else x = 3 * x + 1;
+          seq.push(x);
+          // 안전장치: 너무 커지면 중단
+          if (seq.length > 2000) break;
+        }
+        return seq;
+      }
+
+      // 색상 생성: 파스텔톤
+      function pastelColorForPath(seed, index, length) {
+        // seed는 시작값(경로 id), index는 위치, length는 경로 길이
+        const hue = (seed * 37) % 360; // 간단한 해시
+        const lightnessBase = 78 - Math.min(25, length / 6);
+        const lightness = lightnessBase - (index / Math.max(1,length)) * 12;
+        const saturation = 40; // 파스텔 느낌
+        return `hsl(${hue} ${saturation}% ${Math.max(55, lightness)}%)`;
+      }
+
+      // 경로를 애니메이션으로 추가
+      async function addPathAnimated(startN, opts = {}) {
+        const seq = collatzSequence(startN).map(String);
+        const pathId = startN;
+        pathsMeta.push({ pathId, startN, seqLength: seq.length });
+
+        for (let i = 0; i < seq.length - 1; i++) {
+          const a = seq[i];
+          const b = seq[i+1];
+
+          // 노드가 없으면 만들어서 지도(그래프)에 추가
+          if (!nodesById.has(a)) {
+            const color = pastelColorForPath(pathId, i, seq.length);
+            nodesById.set(a, { id: a, color });
+          }
+
+          if (!nodesById.has(b)) {
+            const color = pastelColorForPath(pathId, i+1, seq.length);
+            nodesById.set(b, { id: b, color });
+          }
+
+          // 링크가 이미 없을 때만 추가
+          const exists = links.find(l => String(l.source) === String(a) && String(l.target) === String(b));
+          if (!exists) {
+            links.push({ source: String(a), target: String(b), pathId, color: pastelColorForPath(pathId, i, seq.length) });
+          }
+
+          // 노드가 이미 존재하면 색깔을 조정(같은 경로에선 유사한 색)
+          const nodeA = nodesById.get(a);
+          const nodeB = nodesById.get(b);
+          nodeA.color = nodeA.color || pastelColorForPath(pathId, i, seq.length);
+          nodeB.color = nodeB.color || pastelColorForPath(pathId, i+1, seq.length);
+
+          updateGraph();
+
+          // 애니메이션 딜레이: 속도에 따른 조절
+          await sleep(80 / animationSpeed);
+        }
+
+        // 경로 끝나면 상태 업데이트
+        setStatus(`완료: ${startN}`);
+      }
+
+      function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+
+      // 전체 애니메이션 컨트롤
+      let running = false;
+      let paused = false;
+      async function runAllPaths() {
+        if (running) return;
+        running = true;
+        setStatus('실행 중...');
+        for (let n = 1; n <= MAX_N; n++) {
+          if (!running) break;
+          while (paused) await sleep(100);
+          setStatus(`진행: ${n} / ${MAX_N}`);
+          await addPathAnimated(n);
+          await sleep(150 / animationSpeed);
+        }
+        setStatus('모든 경로 완료');
+        running = false;
+      }
+
+      // 상태창 업데이트
+      function setStatus(text) { d3.select('#status').text(text); }
+
+      // 컨트롤 바인딩
+      d3.select('#startBtn').on('click', () => {
+        paused = false;
+        if (!running) runAllPaths();
+      });
+
+      d3.select('#pauseBtn').on('click', () => {
+        paused = !paused;
+        setStatus(paused ? '일시정지' : (running ? '재개' : '준비됨'));
+      });
+
+      d3.select('#speed').on('input', function() {
+        animationSpeed = +this.value;
+      });
+
+      // 초기 노드(1)을 미리 넣어둠
+      nodesById.set('1', { id: '1', color: pastelColorForPath(1, 0, 1) });
+      updateGraph();
+
+      // 창 리사이즈 핸들러
+      window.addEventListener('resize', () => {
+        const h = window.innerHeight - 120;
+        svg.attr('height', h);
+        simulation.force('center', d3.forceCenter(WIDTH / 2, h / 2));
+      });
+
+      // 안내 텍스트
+      setStatus('준비됨 — 시작 버튼을 누르세요');
+    </script>
+  </body>
+</html>
